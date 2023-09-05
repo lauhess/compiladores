@@ -131,7 +131,7 @@ binding = do v <- var
              return (v, ty)
 
 binders :: P [(Name, SType)]
-binders = many1 (parens binding)
+binders = many1 (parens binding) <|> (binding >>= \x -> return [x])
 
 lam :: P STerm
 lam = do i <- getPos
@@ -169,39 +169,52 @@ fix = do i <- getPos
 isRecursive :: P Bool 
 isRecursive = try (reserved "rec" >> return True) <|> return False
 
+maybeName :: P (Maybe Name)
+maybeName = try (var >>= (\x -> return (just x))) <|> return Nothing
+
+maybeType :: P (Maybe SType)
+maybeType = try (typeP >>= (\x -> return (just x))) <|> return Nothing
+
 letexp :: P STerm
 letexp = do
   i <- getPos
   reserved "let"
   recursive <- isRecursive
+  tryName <- maybeName
   binds <- binders
+  tryType <- maybeType
   reservedOp "="
   def <- expr
   reserved "in"
   body <- expr
-  return (SLet i recursive binds def body)
+  case (tryName, tryType) of
+    (Just n1, Just n2) -> return (SLet i recursive ((n1,n2):binds) def body)
+    _                  -> return (SLet i recursive binds def body)
+
+  
 
 -- | Parser de términos
 tm :: P STerm
 tm = app <|> lam <|> ifz <|> printOp <|> fix <|> letexp 
 
 -- | Parser de declaraciones
-decl :: P (Decl STerm)
+decl :: P (SDecl  STerm)
 decl = do
      i <- getPos
      reserved "let"
-     v <- var
+     recursive <- isRecursive
+     binds <- binders
      reservedOp "="
      t <- expr
-     return (Decl i v t)
+     return (SDecl i recursive binds t)
 
 -- | Parser de programas (listas de declaraciones) 
-program :: P [Decl STerm]
+program :: P [SDecl STerm]
 program = many decl
 
 -- | Parsea una declaración a un término
 -- Útil para las sesiones interactivas
-declOrTm :: P (Either (Decl STerm) STerm)
+declOrTm :: P (Either (SDecl STerm) STerm)
 declOrTm =  try (Left <$> decl) <|> (Right <$> expr)
 
 -- Corre un parser, chequeando que se pueda consumir toda la entrada

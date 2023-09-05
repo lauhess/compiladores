@@ -53,11 +53,6 @@ data STy var =
 --   }
 --   deriving (Show, Functor)
 
-data SDecl info ty var a =  
-    SDeclLet info Bool [(var, ty)] (STm info ty a) 
-  | SDecl info var a
-  deriving (Show, Functor)
-
 -- | AST de Tipos
 data Ty =
       NatTy
@@ -69,6 +64,9 @@ type Name = String
 type SType = STy Name 
 type STerm = STm Pos SType Name -- ^ 'STm' tiene 'Name's como variables ligadas y libres y globales, guarda posición  
 
+data SDecl a =  
+    SDecl Pos Bool [(Name, SType)] a
+  deriving (Show, Functor)
 
 newtype Const = CNat Int
   deriving Show
@@ -80,6 +78,7 @@ data BinaryOp = Add | Sub
 data Decl a = Decl
   { declPos  :: Pos
   , declName :: Name
+  , declType :: Ty
   , declBody :: a
   }
   deriving (Show, Functor)
