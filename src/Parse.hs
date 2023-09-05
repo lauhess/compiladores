@@ -43,7 +43,7 @@ langDef = emptyDef {
 whiteSpace :: P ()
 whiteSpace = Tok.whiteSpace lexer
 
-natural :: P Integer 
+natural :: P Integer
 natural = Tok.natural lexer
 
 stringLiteral :: P String
@@ -81,18 +81,21 @@ getPos :: P Pos
 getPos = do pos <- getPosition
             return $ Pos (sourceLine pos) (sourceColumn pos)
 
-tyatom :: P Ty
-tyatom = (reserved "Nat" >> return NatTy)
+tyatom :: P SType
+tyatom = (reserved "Nat" >> return SNatTy)
          <|> parens typeP
 
-typeP :: P Ty
-typeP = try (do 
+typeP' :: P SType
+typeP' = try (do
           x <- tyatom
           reservedOp "->"
-          y <- typeP
-          return (FunTy x y))
-      <|> tyatom
-          
+          y <- typeP'
+          return (SFunTy x y))
+        <|> tyatom
+
+typeP :: P SType 
+typeP = try typeP' <|> (identifier >>= (return . SVT))
+
 const :: P Const
 const = CNat <$> num
 
@@ -121,19 +124,22 @@ atom =     (flip SConst <$> const <*> getPos)
        <|> printOp
 
 -- parsea un par (variable : tipo)
-binding :: P (Name, Ty)
+binding :: P (Name, SType)
 binding = do v <- var
              reservedOp ":"
              ty <- typeP
              return (v, ty)
 
+binders :: P [(Name, SType)]
+binders = many1 (parens binding)
+
 lam :: P STerm
 lam = do i <- getPos
          reserved "fun"
-         (v,ty) <- parens binding
+         binds <- parens binders
          reservedOp "->"
          t <- expr
-         return (SLam i (v,ty) t)
+         return (SLam i binds t)
 
 -- Nota el parser app también parsea un solo atom.
 app :: P STerm
@@ -155,30 +161,33 @@ ifz = do i <- getPos
 fix :: P STerm
 fix = do i <- getPos
          reserved "fix"
-         (f, fty) <- parens binding
-         (x, xty) <- parens binding
+         binds <- binders
          reservedOp "->"
          t <- expr
-         return (SFix i (f,fty) (x,xty) t)
+         return (SFix i binds t)
+
+isRecursive :: P Bool 
+isRecursive = try (reserved "rec" >> return True) <|> return False
 
 letexp :: P STerm
 letexp = do
   i <- getPos
   reserved "let"
-  (v,ty) <- parens binding
-  reservedOp "="  
+  recursive <- isRecursive
+  binds <- binders
+  reservedOp "="
   def <- expr
   reserved "in"
   body <- expr
-  return (SLet i (v,ty) def body)
+  return (SLet i recursive binds def body)
 
 -- | Parser de términos
 tm :: P STerm
-tm = app <|> lam <|> ifz <|> printOp <|> fix <|> letexp
+tm = app <|> lam <|> ifz <|> printOp <|> fix <|> letexp 
 
 -- | Parser de declaraciones
 decl :: P (Decl STerm)
-decl = do 
+decl = do
      i <- getPos
      reserved "let"
      v <- var
