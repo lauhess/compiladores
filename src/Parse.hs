@@ -43,7 +43,7 @@ langDef = emptyDef {
 whiteSpace :: P ()
 whiteSpace = Tok.whiteSpace lexer
 
-natural :: P Integer 
+natural :: P Integer
 natural = Tok.natural lexer
 
 stringLiteral :: P String
@@ -81,18 +81,21 @@ getPos :: P Pos
 getPos = do pos <- getPosition
             return $ Pos (sourceLine pos) (sourceColumn pos)
 
-tyatom :: P Ty
-tyatom = (reserved "Nat" >> return NatTy)
+tyatom :: P SType
+tyatom = (reserved "Nat" >> return SNatTy)
          <|> parens typeP
 
-typeP :: P Ty
-typeP = try (do 
+typeP' :: P SType
+typeP' = try (do
           x <- tyatom
           reservedOp "->"
-          y <- typeP
-          return (FunTy x y))
-      <|> tyatom
-          
+          y <- typeP'
+          return (SFunTy x y))
+        <|> tyatom
+
+typeP :: P SType 
+typeP = try typeP' <|> (identifier >>= (return . SVT))
+
 const :: P Const
 const = CNat <$> num
 
@@ -121,19 +124,22 @@ atom =     (flip SConst <$> const <*> getPos)
        <|> printOp
 
 -- parsea un par (variable : tipo)
-binding :: P (Name, Ty)
+binding :: P (Name, SType)
 binding = do v <- var
              reservedOp ":"
              ty <- typeP
              return (v, ty)
 
+binders :: P [(Name, SType)]
+binders = many1 (parens binding) <|> (binding >>= \x -> return [x])
+
 lam :: P STerm
 lam = do i <- getPos
          reserved "fun"
-         (v,ty) <- parens binding
+         binds <- parens binders
          reservedOp "->"
          t <- expr
-         return (SLam i (v,ty) t)
+         return (SLam i binds t)
 
 -- Nota el parser app también parsea un solo atom.
 app :: P STerm
@@ -155,44 +161,60 @@ ifz = do i <- getPos
 fix :: P STerm
 fix = do i <- getPos
          reserved "fix"
-         (f, fty) <- parens binding
-         (x, xty) <- parens binding
+         binds <- binders
          reservedOp "->"
          t <- expr
-         return (SFix i (f,fty) (x,xty) t)
+         return (SFix i binds t)
+
+isRecursive :: P Bool 
+isRecursive = try (reserved "rec" >> return True) <|> return False
+
+maybeName :: P (Maybe Name)
+maybeName = try (var >>= (\x -> return (just x))) <|> return Nothing
+
+maybeType :: P (Maybe SType)
+maybeType = try (typeP >>= (\x -> return (just x))) <|> return Nothing
 
 letexp :: P STerm
 letexp = do
   i <- getPos
   reserved "let"
-  (v,ty) <- parens binding
-  reservedOp "="  
+  recursive <- isRecursive
+  tryName <- maybeName
+  binds <- binders
+  tryType <- maybeType
+  reservedOp "="
   def <- expr
   reserved "in"
   body <- expr
-  return (SLet i (v,ty) def body)
+  case (tryName, tryType) of
+    (Just n1, Just n2) -> return (SLet i recursive ((n1,n2):binds) def body)
+    _                  -> return (SLet i recursive binds def body)
+
+  
 
 -- | Parser de términos
 tm :: P STerm
-tm = app <|> lam <|> ifz <|> printOp <|> fix <|> letexp
+tm = app <|> lam <|> ifz <|> printOp <|> fix <|> letexp 
 
 -- | Parser de declaraciones
-decl :: P (Decl STerm)
-decl = do 
+decl :: P (SDecl  STerm)
+decl = do
      i <- getPos
      reserved "let"
-     v <- var
+     recursive <- isRecursive
+     binds <- binders
      reservedOp "="
      t <- expr
-     return (Decl i v t)
+     return (SDecl i recursive binds t)
 
 -- | Parser de programas (listas de declaraciones) 
-program :: P [Decl STerm]
+program :: P [SDecl STerm]
 program = many decl
 
 -- | Parsea una declaración a un término
 -- Útil para las sesiones interactivas
-declOrTm :: P (Either (Decl STerm) STerm)
+declOrTm :: P (Either (SDecl STerm) STerm)
 declOrTm =  try (Left <$> decl) <|> (Right <$> expr)
 
 -- Corre un parser, chequeando que se pueda consumir toda la entrada
