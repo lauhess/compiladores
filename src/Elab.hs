@@ -38,8 +38,19 @@ elab' env (SBinaryOp i o t u) = BinaryOp i o (elab' env t) (elab' env u)
 elab' env (SPrint i str t) = Print i str (elab' env t)
 -- Aplicaciones generales
 elab' env (SApp p h a) = App p (elab' env h) (elab' env a)
-elab' env (SLet p (v,vty) def body) =  
+elab' env (SLet p recursive (v,vty) def body) =  
   Let p v vty (elab' env def) (close v (elab' (v:env) body))
+elab' env (SLet p recursive bs def body) = undefined
+  -- elabLet p recursive (head bs) (tail def) def body
+  -- case (recursive, bs) of 
+  --   (False, [(v, vty)]) -> Let p v vty (elab' env def) (close v (elab' (v:env) body))
+  --   (False, [(v, vty):bs]) -> Let p v vty (elab' env def) (close v (elab' (v:env) body))
 
+elabLet p False (v, vty) [] def body = Let p v vty (elab' env def) (close v (elab' (v:env) body))
+elabLet p False (v, vty) [(x,xty)] def body = undefined
+
+elabSTy 
 elabDecl :: Decl STerm -> Decl Term
 elabDecl = fmap elab
+
+
