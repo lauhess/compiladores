@@ -1,4 +1,5 @@
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+{-# HLINT ignore "Use <&>" #-}
 {-# HLINT ignore "Use <$>" #-}
 {-|
 Module      : Parse
@@ -93,8 +94,8 @@ typeP' = try (do
           return (SFunTy x y))
         <|> tyatom
 
-typeP :: P SType 
-typeP = try typeP' <|> (identifier >>= (return . SVT))
+typeP :: P SType
+typeP = try typeP' <|> (tyIdentifier >>= (return . SVT))
 
 const :: P Const
 const = CNat <$> num
@@ -166,36 +167,32 @@ fix = do i <- getPos
          t <- expr
          return (SFix i binds t)
 
-isRecursive :: P Bool 
+isRecursive :: P Bool
 isRecursive = try (reserved "rec" >> return True) <|> return False
 
-maybeName :: P (Maybe Name)
-maybeName = try (var >>= (\x -> return (just x))) <|> return Nothing
-
-maybeType :: P (Maybe SType)
-maybeType = try (typeP >>= (\x -> return (just x))) <|> return Nothing
+letFunction :: P [(Name, SType)]
+letFunction = do 
+  name <- var
+  binds <- binders 
+  reserved ":"
+  myType <- typeP 
+  return ((name,myType) : binds)
 
 letexp :: P STerm
 letexp = do
   i <- getPos
   reserved "let"
   recursive <- isRecursive
-  tryName <- maybeName
-  binds <- binders
-  tryType <- maybeType
+  binds <- try ((parens binding <|> binding) >>= \b -> return [b]) <|> letFunction
   reservedOp "="
   def <- expr
   reserved "in"
   body <- expr
-  case (tryName, tryType) of
-    (Just n1, Just n2) -> return (SLet i recursive ((n1,n2):binds) def body)
-    _                  -> return (SLet i recursive binds def body)
-
-  
+  return (SLet i recursive binds def body)
 
 -- | Parser de términos
 tm :: P STerm
-tm = app <|> lam <|> ifz <|> printOp <|> fix <|> letexp 
+tm = app <|> lam <|> ifz <|> printOp <|> fix <|> letexp
 
 -- | Parser de declaraciones
 decl :: P (SDecl  STerm)
