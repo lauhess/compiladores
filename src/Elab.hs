@@ -31,7 +31,10 @@ elab' env (SV p v) =
     else V p (Global v)
 
 elab' _ (SConst p c) = Const p c
--- elab' env (SLam p (v,ty) t) = Lam p v ty (close v (elab' (v:env) t))
+elab' env (SLam p [(v,vty)] t) =      -- Definicion original
+  Lam p v vty (close v (elab' (v:env) t))
+elab' env (SLam p [(v,vty):vs] t) = 
+  Lam p v vty (close v (elab' (v:env) (SLam p vs t)))
 -- elab' env (SFix p (f,fty) (x,xty) t) = Fix p f fty x xty (close2 f x (elab' (x:f:env) t))
 elab' env (SIfZ p c t e)         = IfZ p (elab' env c) (elab' env t) (elab' env e)
 -- Operadores binarios
@@ -40,31 +43,46 @@ elab' env (SBinaryOp i o t u) = BinaryOp i o (elab' env t) (elab' env u)
 elab' env (SPrint i str t) = Print i str (elab' env t)
 -- Aplicaciones generales
 elab' env (SApp p h a) = App p (elab' env h) (elab' env a)
-elab' env (SLet p recursive (v,vty) def body) =  
-  Let p v vty (elab' env def) (close v (elab' (v:env) body))
-elab' env (SLet p recursive bs def body) = undefined
+  --Let p v vty (elab' env def) (close v (elab' (v:env) body))
+elab' env (SLet p recursive bs def body) = 
+  elabLet p env () recursive (head bs) (tail bs) def body
+elab' _ _ = undefined
   -- elabLet p recursive (head bs) (tail def) def body
   -- case (recursive, bs) of 
   --   (False, [(v, vty)]) -> Let p v vty (elab' env def) (close v (elab' (v:env) body))
   --   (False, [(v, vty):bs]) -> Let p v vty (elab' env def) (close v (elab' (v:env) body))
 
+-- Resolucion Let
 elabLet :: Pos -> [Name] -> (SType -> Ty) -> Bool -> (Name, Ty) -> [(Name, SType)] -> STerm -> STerm -> Term
-elabLet p env transTy False (v, vty) [] def body = 
-  Let p v vty (elab' env def) (elabClose v env body)--(close v (elab' (v:env) body))
+elabLet p env transTy False (v, vty) [] def body =      -- Definicion original
+  Let p v vty (elab' env def) (elabClose v env body)
 elabLet p env transTy False (v, vty) [(x,xty)] def body = 
-  Let p v (FunTy (transTy xty) vty) def' (elabClose x env def) -- (close v (elab' (v:env) body))
+  Let p v (FunTy (transTy xty) vty) def' (elabClose x env def) 
   where
     def' = elab' env (SLam p [(x,xty)] def)
 elabLet p env transTy False (v, vty) xs def body = 
-  let
+  Let p v fty def' (elabClose v env body)
+  where
     fty = makeType xs
     def' = elab' env (SLam p xs def)
-  in Let p v fty def' (elabClose v env body)
-  where
     makeType :: [(Name, SType)] -> Ty
     makeType [] = vty
     makeType ((_,t):ts) = FunTy (transTy t) (makeType ts)
-elabLet _ _ _ _ _ _ _ _= undefined
+-- Resolucion Let Rec
+elabLet p env transTy True (v, vty) [(x,xty)] def body = -- Definicion original
+  Let p v (FunTy xtype vty) def' (elabClose x env def)
+  where
+    xtype = transTy xty
+    def' = Fix p v (FunTy xtype vty) x xtype (elabClose2 v x env def)
+elabLet p env transTy True (v, vty) xs def body = 
+  Let p v fty def' (elabClose v env body)
+  where
+    fty = makeType xs
+    def' = elab' env (SFix p xs def)
+    makeType :: [(Name, SType)] -> Ty
+    makeType [] = vty
+    makeType ((_,t):ts) = FunTy (transTy t) (makeType ts)
+-- elabLet _ _ _ _ _ _ _ _= undefined
 
 elabSTy :: MonadFD4 m => SType -> m Ty
 elabSTy SNatTy = return NatTy
@@ -87,3 +105,5 @@ elabDecl = fmap elab
 
 elabClose :: Name -> [Name] -> STerm ->  Scope Pos Var
 elabClose x env term = close x (elab' (x:env) term)
+elabClose2 :: Name -> Name -> [Name] -> STerm ->  Scope2 Pos Var
+elabClose2 x y env term = close2 x y (elab' (x:env) term)
