@@ -15,6 +15,7 @@ module Elab ( elab, elabDecl) where
 import Lang
 import Subst
 import MonadFD4 (lookupTyS, addTyS, MonadFD4, lookupTyS, failFD4)
+import Common (Pos)
 
 -- | 'elab' transforma variables ligadas en índices de de Bruijn
 -- en un término dado. 
@@ -47,12 +48,23 @@ elab' env (SLet p recursive bs def body) = undefined
   --   (False, [(v, vty)]) -> Let p v vty (elab' env def) (close v (elab' (v:env) body))
   --   (False, [(v, vty):bs]) -> Let p v vty (elab' env def) (close v (elab' (v:env) body))
 
-elabLet p env False (v, vty) [] def body = 
-  Let p v vty (elab' env def) (close v (elab' (v:env) body))
-elabLet p env False (v, vty) [(x,xty)] def body = 
-  Let p v (FunTy xty vty) (Lam p (close x (elab' p (x:env) def))) xty (close v (elab' (v:env) body))
-elabLet p env False (v, vty) ((x,xty):bs) def body = 
-  Let p v () () (elabClose v env body)
+elabLet :: Pos -> [Name] -> (SType -> Ty) -> Bool -> (Name, Ty) -> [(Name, SType)] -> STerm -> STerm -> Term
+elabLet p env transTy False (v, vty) [] def body = 
+  Let p v vty (elab' env def) (elabClose v env body)--(close v (elab' (v:env) body))
+elabLet p env transTy False (v, vty) [(x,xty)] def body = 
+  Let p v (FunTy (transTy xty) vty) def' (elabClose x env def) -- (close v (elab' (v:env) body))
+  where
+    def' = elab' env (SLam p [(x,xty)] def)
+elabLet p env transTy False (v, vty) xs def body = 
+  let
+    fty = makeType xs
+    def' = elab' env (SLam p xs def)
+  in Let p v fty def' (elabClose v env body)
+  where
+    makeType :: [(Name, SType)] -> Ty
+    makeType [] = vty
+    makeType ((_,t):ts) = FunTy (transTy t) (makeType ts)
+elabLet _ _ _ _ _ _ _ _= undefined
 
 elabSTy :: MonadFD4 m => SType -> m Ty
 elabSTy SNatTy = return NatTy
@@ -73,4 +85,5 @@ elabSTy (SVT v) = do
 elabDecl :: Decl STerm -> Decl Term
 elabDecl = fmap elab
 
+elabClose :: Name -> [Name] -> STerm ->  Scope Pos Var
 elabClose x env term = close x (elab' (x:env) term)
