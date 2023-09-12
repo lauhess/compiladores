@@ -50,7 +50,7 @@ elab' env (SLet p recursive bs def body) = undefined
 elabLet p env False (v, vty) [] def body = 
   Let p v vty (elab' env def) (close v (elab' (v:env) body))
 elabLet p env False (v, vty) [(x,xty)] def body = 
-  Let p v (FunTy xty vty) (Lam p (close x (elab' p (x:env) def))) (close v (elab' (v:env) body))
+  Let p v (FunTy xty vty) (Lam p (close x (elab' p (x:env) def))) xty (close v (elab' (v:env) body))
 elabLet p env False (v, vty) ((x,xty):bs) def body = 
   Let p v () () (elabClose v env body)
 
