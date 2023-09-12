@@ -3,6 +3,7 @@
 {-# OPTIONS_GHC -Wno-name-shadowing #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Use <$>" #-}
+{-# HLINT ignore "Use <&>" #-}
 
 {-|
 Module      : MonadFD4
@@ -33,6 +34,8 @@ module MonadFD4 (
   failFD4,
   addDecl,
   catchErrors,
+  addTyS,
+  lookupTyS,
   MonadFD4,
   module Control.Monad.Except,
   module Control.Monad.State)
@@ -110,6 +113,12 @@ lookupTy :: MonadFD4 m => Name -> m (Maybe Ty)
 lookupTy nm = do
       s <- get
       return $ lookup nm (tyEnv s)
+
+addTyS :: MonadFD4 m => Name -> Ty -> m ()
+addTyS nm ty = modify (\s -> s { typeSynonym = (nm,ty) : typeSynonym s })
+
+lookupTyS :: MonadFD4 m => Name -> m (Maybe Ty)
+lookupTyS nm = get >>= return . lookup nm . typeSynonym
 
 failPosFD4 :: MonadFD4 m => Pos -> String -> m a
 failPosFD4 p s = throwError (ErrPos p s)

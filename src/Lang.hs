@@ -40,8 +40,8 @@ data STm info ty var =
 data STy var =
     SNatTy
   | SFunTy (STy var) (STy var) 
-  | STyS var (STy  var)
-  | SVT var 
+  | STyS var (STy  var) -- Declaracion sinonimo de tipo
+  | SVT var             -- Uso de sinonimo de tipo
   deriving (Show,Eq)
 
 
