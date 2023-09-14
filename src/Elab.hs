@@ -81,18 +81,12 @@ elabLet p env  False (v, vty) [(x,xty)] def body = do
   bodyElab <- elabClose x env body
   return $ Let p v (FunTy xType vty) defElab bodyElab
 elabLet p env  False (v, vty) xs def body = do
-  fty <- makeType xs
+  fty <- makeType xs vty
   defElab <- elab' env (SLam p xs def)
   bodyElab <- elabClose v env body
   def' <- elab' env (SLam p xs def)
   return $ Let p v fty defElab bodyElab
-  where
-    makeType ::  MonadFD4 m => [(Name, SType)] -> m Ty
-    makeType [] = return  vty
-    makeType ((_,t):ts) = do
-      ts' <- makeType ts
-      t'  <- elabSTy t
-      return $ FunTy  t' ts'
+
 -- Resolucion Let Rec
 elabLet p env  True (v, vty) [(x,xty)] def body = do-- Definicion original
   xtype <- elabSTy xty
@@ -103,15 +97,9 @@ elabLet p env  True (v, vty) [(x,xty)] def body = do-- Definicion original
 elabLet p env  True (v, vty) xs def body = do
   bodyElab <- elabClose v env body
   def' <- elab' env (SFix p xs def)
-  fty <- makeType xs
+  fty <- makeType xs vty
   return $ Let p v fty def' bodyElab
-  where
-    makeType ::  MonadFD4 m => [(Name, SType)] -> m Ty
-    makeType [] = return  vty
-    makeType ((_,t):ts) = do
-      ts' <- makeType ts
-      t'  <- elabSTy t
-      return $ FunTy  t' ts'
+
 -- elabLet _ _ _ _ _ _ _ _= undefined
 
 elabSTy :: MonadFD4 m => SType -> m Ty
@@ -143,3 +131,10 @@ elabClose2 :: MonadFD4 m => Name -> Name -> [Name] -> STerm -> m (Scope2 Pos Var
 elabClose2 x y env term = do 
   t <- elab' (x:env) term
   return $ close2 x y t
+
+makeType ::  MonadFD4 m => [(Name, SType)] -> Ty -> m Ty
+makeType [] vty = return vty
+makeType ((_,t):ts) vty = do
+  ts' <- makeType ts vty
+  t'  <- elabSTy t
+  return $ FunTy  t' ts'
