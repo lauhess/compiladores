@@ -194,9 +194,9 @@ letexp = do
 tm :: P STerm
 tm = app <|> lam <|> ifz <|> printOp <|> fix <|> letexp
 
--- | Parser de declaraciones
-decl :: P (SDecl  STerm)
-decl = do
+-- | Parser de declaraciones Let
+letDecl :: P (SDecl STerm)
+letDecl = do
      i <- getPos
      reserved "let"
      recursive <- isRecursive
@@ -204,6 +204,21 @@ decl = do
      reservedOp "="
      t <- expr
      return (SDecl i recursive binds t)
+
+-- | Parser de declaraciones Typedef
+typeDefDecl :: P (SDecl STerm)
+typeDefDecl = do
+     i <- getPos
+     reserved "type"
+     alias <- tyIdentifier
+     reservedOp "="
+     t <- typeP
+     return (SDeclTy i alias t)
+
+-- | Parser de declaraciones
+decl :: P (SDecl  STerm)
+decl = letDecl <|> typeDefDecl
+     
 
 -- | Parser de programas (listas de declaraciones) 
 program :: P [SDecl STerm]

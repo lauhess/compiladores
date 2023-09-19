@@ -134,8 +134,13 @@ evalDecl (Decl p x e) = do
     e' <- eval e
     return (Decl p x e')
 
-handleDecl ::  MonadFD4 m => Decl STerm -> m ()
-handleDecl d = do
+handleDecl ::  MonadFD4 m => SDecl STerm -> m ()
+handleDecl d = case elabDecl d of
+                    (Just d') -> handleDecl' d'
+                    Nothing   -> return ()
+    
+handleDecl' ::  MonadFD4 m => SDecl STerm -> m ()
+handleDecl' d = do
         m <- getMode
         case m of
           Interactive -> do

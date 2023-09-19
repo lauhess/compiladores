@@ -40,7 +40,6 @@ data STm info ty var =
 data STy var =
     SNatTy
   | SFunTy (STy var) (STy var) 
-  | STyS var (STy  var) -- Declaracion sinonimo de tipo
   | SVT var             -- Uso de sinonimo de tipo
   deriving (Show,Eq)
 
@@ -65,7 +64,8 @@ type SType = STy Name
 type STerm = STm Pos SType Name -- ^ 'STm' tiene 'Name's como variables ligadas y libres y globales, guarda posición  
 
 data SDecl a =  
-    SDecl Pos Bool [(Name, SType)] a
+      SDecl Pos Bool [(Name, SType)] a
+    | SDeclTy Pos Name SType
   deriving (Show, Functor)
 
 newtype Const = CNat Int

@@ -108,19 +108,33 @@ elabSTy (SFunTy t1 t2) = do
   ft1 <- elabSTy t1
   ft2 <- elabSTy t2
   return $ FunTy ft1 ft2
-elabSTy (STyS v t) = do
-  ty <- elabSTy t
-  addTyS v ty
-  return ty
 elabSTy (SVT v) = do 
   ty <- lookupTyS v
   case ty of 
     Just t -> return t
     Nothing -> failFD4 $ "No se encontro el sinónimo de tipo " ++ v
 
-elabDecl :: Decl STerm -> Decl Term
+elabDecl :: MonadFD4 m => SDecl STerm -> m (Maybe (Decl STerm))
 -- elabDecl = fmap elab
-elabDecl = undefined
+elabDecl (SDecl pos False [(x, xty)] def) = 
+  elabSTy xty >>= \t -> return $ Just $ Decl pos x t def
+elabDecl (SDecl pos False ((x, xty):xs) def) = do
+  t' <- elabSTy xty
+  t <- makeType xs t'
+  return $ Just $ Decl pos x t $ SLam pos xs def
+  
+elabDecl (SDecl pos True ((x, xty):[(y, yty)]) def) = undefined
+  -- do
+  -- defClose2 <- elabClose2 v x env def
+  -- let  def' = Fix p v (FunTy xtype vty) x xtype defClose2
+  -- return $ Just $ Decl pos x () $ SFix pos (FunTy xtype vty)
+
+elabDecl (SDecl pos True [(x, xty)] def) = undefined
+elabDecl (SDeclTy pos s sty) = do 
+  t <- elabSTy sty 
+  addTyS s t 
+  return Nothing
+elabDecl _ = undefined
 
 elabClose :: MonadFD4 m => Name -> [Name] -> STerm -> m (Scope Pos Var)
 elabClose x env term = do 
