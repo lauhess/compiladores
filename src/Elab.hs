@@ -39,7 +39,6 @@ elab' env (SLam p ((v,vty):vs) t) = do
   vElabType <- elabSTy vty
   closedTerm <- elabClose v env (SLam p vs t)
   return $ Lam p v vElabType closedTerm
--- elab' env (SFix p (f,fty) (x,xty) t) = Fix p f fty x xty (close2 f x (elab' (x:f:env) t))
 elab' env (SIfZ p c t e) = do 
   cElab <- elab' env c
   tElab <- elab' env t
@@ -63,7 +62,16 @@ elab' env (SApp p h a) = do
 elab' env (SLet p recursive bs def body) = do
   elabType <- elabSTy $ snd (head bs)
   elabLet p env recursive (head bs) (tail bs) def body
-elab' env (SFix info var_Ty body) = undefined
+elab' env (SFix info [(f, fty),(x, xty)] body) = do
+  bElab <- elabClose2 f x env body
+  ftyElab <- elabSTy fty
+  xtyElab <- elabSTy xty
+  return $ Fix info f ftyElab x xtyElab bElab
+elab' env (SFix info (fun:x:xs) body) = do
+  bElab <- elabClose2 (fst fun) (fst x) env (SLam info xs body)
+  ftyElab <- elabSTy $ snd fun
+  xtyElab <- elabSTy $ snd x
+  return $ Fix info (fst fun) ftyElab (fst x) xtyElab bElab
 
 elab' _ _ = undefined
   -- elabLet p recursive (head bs) (tail def) def body
