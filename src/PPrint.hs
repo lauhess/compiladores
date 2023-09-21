@@ -14,7 +14,8 @@ module PPrint (
     pp,
     ppTy,
     ppName,
-    ppDecl
+    ppDecl,
+    unElabTy
     ) where
 
 import Lang
@@ -101,16 +102,24 @@ name2doc n = nameColor (pretty n)
 ppName :: Name -> String
 ppName = id
 
+ty2doc :: Ty -> Doc AnsiStyle
+ty2doc NatTy     = typeColor (pretty "Nat")
+ty2doc (FunTy x@(FunTy _ _) y) = sep [parens (ty2doc x), typeOpColor (pretty "->"),ty2doc y]
+ty2doc (FunTy x y) = sep [ty2doc x, typeOpColor (pretty "->"),ty2doc y] 
+
 -- | Pretty printer para tipos (Doc)
-ty2doc :: SType -> Doc AnsiStyle
-ty2doc SNatTy     = typeColor (pretty "Nat")
-ty2doc (SFunTy x@(SFunTy _ _) y) = sep [parens (ty2doc x), typeOpColor (pretty "->"),ty2doc y]
-ty2doc (SFunTy x y) = sep [ty2doc x, typeOpColor (pretty "->"),ty2doc y]
-ty2doc (SVT v) = pretty v
+sty2doc :: SType -> Doc AnsiStyle
+sty2doc SNatTy     = typeColor (pretty "Nat")
+sty2doc (SFunTy x@(SFunTy _ _) y) = sep [parens (sty2doc x), typeOpColor (pretty "->"), sty2doc y]
+sty2doc (SFunTy x y) = sep [sty2doc x, typeOpColor (pretty "->"), sty2doc y]
+sty2doc (SVT v) = pretty v
 
 -- | Pretty printer para tipos (String)
-ppTy :: SType -> String
+ppTy :: Ty -> String
 ppTy = render . ty2doc
+
+ppSTy :: SType -> String
+ppSTy = render . sty2doc
 
 c2doc :: Const -> Doc AnsiStyle
 c2doc (CNat n) = constColor (pretty (show n))
@@ -192,7 +201,7 @@ t2doc _ _ = undefined
 
 binding2doc :: (Name, SType) -> Doc AnsiStyle
 binding2doc (x, ty) =
-  parens (sep [name2doc x, pretty ":", ty2doc ty])
+  parens (sep [name2doc x, pretty ":", sty2doc ty])
 
 -- | Pretty printing de términos (String)
 pp :: MonadFD4 m => TTerm -> m String

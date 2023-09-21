@@ -91,8 +91,8 @@ expect :: MonadFD4 m => Ty    -- ^ tipo esperado
 expect ty tt = let ty' = getTy tt
                in if ty == ty' then return tt 
                                else typeError tt $ 
-              "Tipo esperado: "++ ppTy (unElabTy ty)
-            ++"\npero se obtuvo: "++ ppTy (unElabTy ty')
+              "Tipo esperado: "++ ppTy ty
+            ++"\npero se obtuvo: "++ ppTy ty'
 
 
 -- | 'domCod chequea que un tipo sea función
@@ -100,7 +100,7 @@ expect ty tt = let ty' = getTy tt
 domCod :: MonadFD4 m => TTerm -> m (Ty, Ty)
 domCod tt = case getTy tt of
     FunTy d c -> return (d, c)
-    _         -> typeError tt $ "Se esperaba un tipo función, pero se obtuvo: " ++ (ppTy . unElabTy . getTy) tt
+    _         -> typeError tt $ "Se esperaba un tipo función, pero se obtuvo: " ++ (ppTy . getTy) tt
 
 -- | 'tcDecl' chequea el tipo de una declaración
 -- y la agrega al entorno de tipado de declaraciones globales
