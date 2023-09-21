@@ -107,7 +107,7 @@ elabLet p env  True (f, fty') [(x,xty)] def body = do    -- Ariedad 1
 elabLet p env  True (f, fty) ((x,xty):xs) def body = do           -- Ariedad n
   let fty' = makeSType xs fty
   let fun = SLam p xs def
-estoy  elab' env $ SLet p True [(f,fty'), (x,xty)] fun body
+  elab' env $ SLet p True [(f,fty'), (x,xty)] fun body
   where 
     makeSType :: [(Name, SType)] -> SType -> SType
     makeSType [] vty = vty
@@ -115,6 +115,9 @@ estoy  elab' env $ SLet p True [(f,fty'), (x,xty)] fun body
       let
         ts' = makeSType ts vty
       in SFunTy t ts'
+
+elabLet _ _ _ _ _ _ _ = undefined
+
 
 ---------------------
 {- Resolucion Let -}
