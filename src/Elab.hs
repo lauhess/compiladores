@@ -62,45 +62,63 @@ elab' env (SApp p h a) = do
   --Let p v vty (elab' env def) (close v (elab' (v:env) body))
 elab' env (SLet p recursive bs def body) = do
   elabType <- elabSTy $ snd (head bs)
-  elabLet p env recursive (fst (head bs) ,elabType) (tail bs) def body
+  elabLet p env recursive (head bs) (tail bs) def body
+elab' env (SFix info var_Ty body) = undefined
+
 elab' _ _ = undefined
   -- elabLet p recursive (head bs) (tail def) def body
   -- case (recursive, bs) of 
   --   (False, [(v, vty)]) -> Let p v vty (elab' env def) (close v (elab' (v:env) body))
   --   (False, [(v, vty):bs]) -> Let p v vty (elab' env def) (close v (elab' (v:env) body))
 
--- Resolucion Let
-elabLet :: MonadFD4 m => Pos -> [Name] -> Bool -> (Name, Ty) -> [(Name, SType)] -> STerm -> STerm -> m Term
-elabLet p env  False (v, vty) [] def body = do     -- Definicion original
+---------------------
+{- Resolucion Let -}
+---------------------
+elabLet :: MonadFD4 m => Pos -> [Name] -> Bool -> (Name, SType) -> [(Name, SType)] -> STerm -> STerm -> m Term
+elabLet p env  False (v, vty') [] def body = do          -- Definicion original (var valor)
+  vty <- elabSTy vty'
   defElab <- elab' env def
   bodyElab <- elabClose v env body
   return $ Let p v vty defElab bodyElab
-elabLet p env  False (v, vty) [(x,xty)] def body = do
+elabLet p env  False (v, vty') [(x,xty)] def body = do   -- Definicion funcion ariedad 1
+  vty <- elabSTy vty'
   defElab <- elab' env (SLam p [(x,xty)] def)
   xType <- elabSTy xty
   bodyElab <- elabClose x env body
   return $ Let p v (FunTy xType vty) defElab bodyElab
-elabLet p env  False (v, vty) xs def body = do
+elabLet p env  False (v, vty') xs def body = do          -- Definicion funcion ariedad n
+  vty <- elabSTy vty'
   fty <- makeType xs vty
   defElab <- elab' env (SLam p xs def)
   bodyElab <- elabClose v env body
   def' <- elab' env (SLam p xs def)
   return $ Let p v fty defElab bodyElab
+---------------------
+{- Resolucion Let Rec -}
+---------------------
 
--- Resolucion Let Rec
-elabLet p env  True (v, vty) [(x,xty)] def body = do-- Definicion original
-  xtype <- elabSTy xty
-  defAAA <- elabClose x env def
-  defClose2 <- elabClose2 v x env def
-  let  def' = Fix p v (FunTy xtype vty) x xtype defClose2
-  return $ Let p v (FunTy xtype vty) def' defAAA
-elabLet p env  True (v, vty) xs def body = do
-  bodyElab <- elabClose v env body
-  def' <- elab' env (SFix p xs def)
-  fty <- makeType xs vty
-  return $ Let p v fty def' bodyElab
+elabLet p env  True (f, fty') [(x,xty)] def body = do    -- Ariedad 1
+  fty <- elabSTy fty'
+  elabXty <- elabSTy xty
+  body' <- elabClose x env body
+  defClose2 <- elabClose2 f x env def
+  let  def' = Fix p f (FunTy elabXty fty) x elabXty defClose2
+  return $ Let p f (FunTy elabXty fty) def' body'
+elabLet p env  True (f, fty) ((x,xty):xs) def body = do           -- Ariedad n
+  let fty' = makeSType xs fty
+  let fun = SLam p xs def
+estoy  elab' env $ SLet p True [(f,fty'), (x,xty)] fun body
+  where 
+    makeSType :: [(Name, SType)] -> SType -> SType
+    makeSType [] vty = vty
+    makeSType ((_,t):ts) vty = 
+      let
+        ts' = makeSType ts vty
+      in SFunTy t ts'
 
--- elabLet _ _ _ _ _ _ _ _= undefined
+---------------------
+{- Resolucion Let -}
+---------------------
 
 elabSTy :: MonadFD4 m => SType -> m Ty
 elabSTy SNatTy = return NatTy
