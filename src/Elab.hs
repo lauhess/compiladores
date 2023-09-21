@@ -26,12 +26,12 @@ elab' :: MonadFD4 m => [Name] -> STerm -> m Term
 elab' env (SV p v) =
   -- Tenemos que ver si la variable es Global o es un nombre local
   -- En env llevamos la lista de nombres locales.
-  return $ if v `elem` env 
+  return $ if v `elem` env
          then V p (Free v)
          else V p (Global v)
 
 elab' _ (SConst p c) = return $ Const p c
-elab' env (SLam p [(v,vty)] t) = do 
+elab' env (SLam p [(v,vty)] t) = do
   vElabType <- elabSTy vty
   closedTerm <- elabClose v env t
   return $ Lam p v vElabType closedTerm
@@ -39,22 +39,22 @@ elab' env (SLam p ((v,vty):vs) t) = do
   vElabType <- elabSTy vty
   closedTerm <- elabClose v env (SLam p vs t)
   return $ Lam p v vElabType closedTerm
-elab' env (SIfZ p c t e) = do 
+elab' env (SIfZ p c t e) = do
   cElab <- elab' env c
   tElab <- elab' env t
   eElab <- elab' env e
   return $ IfZ p cElab tElab eElab
 -- Operadores binarios
-elab' env (SBinaryOp i o t u) = do 
+elab' env (SBinaryOp i o t u) = do
   tElab <- elab' env t
   uElab <- elab' env u
   return $ BinaryOp i o tElab uElab
 -- Operador Print
-elab' env (SPrint i str t) = do 
+elab' env (SPrint i str t) = do
   tElab <- elab' env t
   return $ Print i str tElab
 -- Aplicaciones generales
-elab' env (SApp p h a) = do 
+elab' env (SApp p h a) = do
   hElab <- elab' env h
   aElab <- elab' env a
   return $ App p hElab aElab
@@ -116,10 +116,10 @@ elabLet p env  True (f, fty) ((x,xty):xs) def body = do           -- Ariedad n
   let fty' = makeSType xs fty
   let fun = SLam p xs def
   elab' env $ SLet p True [(f,fty'), (x,xty)] fun body
-  where 
+  where
     makeSType :: [(Name, SType)] -> SType -> SType
     makeSType [] vty = vty
-    makeSType ((_,t):ts) vty = 
+    makeSType ((_,t):ts) vty =
       let
         ts' = makeSType ts vty
       in SFunTy t ts'
@@ -128,50 +128,60 @@ elabLet _ _ _ _ _ _ _ = undefined
 
 
 ---------------------
-{- Resolucion Let -}
+{- Elaboracion de Tipos -}
 ---------------------
 
 elabSTy :: MonadFD4 m => SType -> m Ty
 elabSTy SNatTy = return NatTy
-elabSTy (SFunTy t1 t2) = do 
+elabSTy (SFunTy t1 t2) = do
   ft1 <- elabSTy t1
   ft2 <- elabSTy t2
   return $ FunTy ft1 ft2
-elabSTy (SVT v) = do 
+elabSTy (SVT v) = do
   ty <- lookupTyS v
-  case ty of 
+  case ty of
     Just t -> return t
     Nothing -> failFD4 $ "No se encontro el sinónimo de tipo " ++ v
 
+---------------------
+{- Elaboracion de Declaraciones -}
+---------------------
 elabDecl :: MonadFD4 m => SDecl STerm -> m (Maybe (Decl STerm))
 -- elabDecl = fmap elab
-elabDecl (SDecl pos False [(x, xty)] def) = 
+elabDecl (SDecl pos False [(x, xty)] def) =             -- Definicion original
   elabSTy xty >>= \t -> return $ Just $ Decl pos x t def
-elabDecl (SDecl pos False ((x, xty):xs) def) = do
+elabDecl (SDecl pos False ((x, xty):xs) def) = do       -- funcion ariedad multiple
   t' <- elabSTy xty
   t <- makeType xs t'
   return $ Just $ Decl pos x t $ SLam pos xs def
-  
-elabDecl (SDecl pos True ((x, xty):[(y, yty)]) def) = undefined
-  -- do
-  -- defClose2 <- elabClose2 v x env def
-  -- let  def' = Fix p v (FunTy xtype vty) x xtype defClose2
-  -- return $ Just $ Decl pos x () $ SFix pos (FunTy xtype vty)
-
-elabDecl (SDecl pos True [(x, xty)] def) = undefined
-elabDecl (SDeclTy pos s sty) = do 
-  t <- elabSTy sty 
-  addTyS s t 
+elabDecl (SDecl pos True [(x, xty), (y, yty)] def) = do -- Fix ariedad simple
+  xty' <- elabSTy xty
+  yty' <- elabSTy yty
+  return $ Just $ Decl pos x (FunTy yty' xty') (SFix pos [(x, SFunTy yty xty), (y, yty)] def)
+elabDecl (SDecl pos True (fun:x:xs) def) = do           -- Fix ariedad multiple
+  let fty' = makeSType xs (snd fun)
+  let def' = SLam pos xs def
+  elabDecl $ SDecl pos True [(fst fun, fty'), x] def'
+  where
+    makeSType :: [(Name, SType)] -> SType -> SType
+    makeSType [] vty = vty
+    makeSType ((_,t):ts) vty =
+      let
+        ts' = makeSType ts vty
+      in SFunTy t ts'
+elabDecl (SDeclTy pos s sty) = do                       -- Nueva declaracion de sinonimo de tipo
+  t <- elabSTy sty
+  addTyS s t
   return Nothing
 elabDecl _ = undefined
 
 elabClose :: MonadFD4 m => Name -> [Name] -> STerm -> m (Scope Pos Var)
-elabClose x env term = do 
+elabClose x env term = do
   t <- elab' (x:env) term
   return $ close x t
 
 elabClose2 :: MonadFD4 m => Name -> Name -> [Name] -> STerm -> m (Scope2 Pos Var)
-elabClose2 x y env term = do 
+elabClose2 x y env term = do
   t <- elab' (x:env) term
   return $ close2 x y t
 
