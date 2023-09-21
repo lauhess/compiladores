@@ -183,7 +183,7 @@ letexp = do
   i <- getPos
   reserved "let"
   recursive <- isRecursive
-  binds <- try ((parens binding <|> binding) >>= \b -> return [b]) <|> letFunction
+  binds <- bindingLet
   reservedOp "="
   def <- expr
   reserved "in"
@@ -194,16 +194,19 @@ letexp = do
 tm :: P STerm
 tm = app <|> lam <|> ifz <|> printOp <|> fix <|> letexp
 
+bindingLet :: P [(Name, SType)]
+bindingLet = try ((parens binding <|> binding) >>= \b -> return [b]) <|> letFunction
+
 -- | Parser de declaraciones Let
 letDecl :: P (SDecl STerm)
 letDecl = do
-     i <- getPos
-     reserved "let"
-     recursive <- isRecursive
-     binds <- binders
-     reservedOp "="
-     t <- expr
-     return (SDecl i recursive binds t)
+      i <- getPos
+      reserved "let"
+      recursive <- isRecursive
+      binds <- bindingLet
+      reservedOp "="
+      t <- expr
+      return (SDecl i recursive binds t)
 
 -- | Parser de declaraciones Typedef
 typeDefDecl :: P (SDecl STerm)
