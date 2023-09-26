@@ -36,6 +36,7 @@ import Eval ( eval )
 import PPrint ( pp , ppTy, ppDecl )
 import MonadFD4
 import TypeChecker ( tc, tcDecl )
+import CEK
 
 prompt :: String
 prompt = "FD4> "
@@ -46,7 +47,7 @@ prompt = "FD4> "
 parseMode :: Parser (Mode,Bool)
 parseMode = (,) <$>
       (flag' Typecheck ( long "typecheck" <> short 't' <> help "Chequear tipos e imprimir el término")
-  -- <|> flag' InteractiveCEK (long "interactiveCEK" <> short 'k' <> help "Ejecutar interactivamente en la CEK")
+     <|> flag' InteractiveCEK (long "interactiveCEK" <> short 'k' <> help "Ejecutar interactivamente en la CEK")
   -- <|> flag' Bytecompile (long "bytecompile" <> short 'm' <> help "Compilar a la BVM")
   -- <|> flag' RunVM (long "runVM" <> short 'r' <> help "Ejecutar bytecode en la BVM")
       <|> flag Interactive Interactive ( long "interactive" <> short 'i' <> help "Ejecutar en forma interactiva")
@@ -163,6 +164,11 @@ handleDecl' d = do
               -- td' <- if opt then optimizeDecl td else return td
               ed <- evalDecl td
               addDecl ed
+          InteractiveCEK -> do 
+            (Decl p x t tt) <- typecheckDecl d
+            v <- seek tt [] []
+            printFD4 $ show v
+
 
       where
         typecheckDecl :: MonadFD4 m => Decl STerm -> m (Decl TTerm)
