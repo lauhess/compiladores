@@ -76,6 +76,8 @@ main = execParser opts >>= go
     go :: (Mode,Bool,[FilePath]) -> IO ()
     go (Interactive,opt,files) =
               runOrFail (Conf opt Interactive) (runInputT defaultSettings (repl files))
+    go (InteractiveCEK,opt,files) =
+              runOrFail (Conf opt InteractiveCEK) ((runInputT defaultSettings (repl files)) >>  mapM_ compileFile files)
     go (m,opt, files) =
               runOrFail (Conf opt m) $ mapM_ compileFile files
 

@@ -2,6 +2,8 @@ module CEK where
 import Lang
 import MonadFD4
 import Eval (semOp)
+import Debug.Trace (trace)
+import Common (Pos(..))
 
 data Frame = 
     AppEval CEKEnv TTerm
@@ -39,7 +41,6 @@ seek term p k = case term of
     -- (Let _ _ _ s (Sc1 t))   -> seek t p $ LetEval p s : k
     (Let info _ _ s (Sc1 t))   -> seek (App info t s) p k
     
-
 destroy :: MonadFD4 m => Val          -> Kont -> m Val
 destroy v ((PrintEval s):ks) = return v
 destroy v ((OpLeftEval op p t):ks) = seek t p $ OpRightEval op v:ks
@@ -51,7 +52,15 @@ destroy v ((Clos val):ks) = case val of
     (ClosFun p t) -> seek t (v:p) ks 
     (ClosFix p t) -> seek t (val:v:p) ks
     _             -> failFD4 "Destroy esperaba clausura y recibio Vall"
+destroy v [] = return v
 destroy v ks = failFD4 $ "Destroy: valor no contemplado \n\t" ++ show v ++ "\n\t" ++ show ks
     
-val2term :: Val -> TTerm 
-val2term _ = undefined 
+-- ToDo: Agregar informa con de nombre
+val2term :: Val -> Term 
+val2term (Vall n) = Const NoPos (CNat n)
+val2term (ClosFun vs t) = Lam NoPos "" $ Scope NoPos (val2term t)
+val2term (ClosFix vs t) =
+
+
+
+
