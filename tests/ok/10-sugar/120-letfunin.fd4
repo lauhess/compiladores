@@ -1,1 +1,1 @@
-let f (x: Nat) : Nat = x + 1 in print "Suc = " (f 1)
+let f (x: Nat) : Nat = x + 1 in print "suc = " (f 1)
