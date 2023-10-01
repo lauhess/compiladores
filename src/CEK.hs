@@ -5,21 +5,22 @@ import MonadFD4
 import Eval (semOp)
 import Common (Pos(..))
 import Debug.Trace
+import Subst
 
-data Frame = 
+data Frame =
     AppEval CEKEnv TTerm
     | Clos Val
     | IfZEval CEKEnv TTerm TTerm
     | OpLeftEval BinaryOp CEKEnv TTerm
-    | OpRightEval BinaryOp Val 
+    | OpRightEval BinaryOp Val
     | PrintEval String
     deriving Show
     -- | LetEval CEKEnv TTerm
 
 type Kont = [Frame]
 
-data Val = 
-      Vall Int 
+data Val =
+      Vall Int
     | ClosFun [Val] Name Ty TTerm
     | ClosFix [Val] Name Ty Name Ty TTerm
     deriving Show
@@ -28,40 +29,50 @@ data Val =
 type CEKEnv = [Val]
 
 seek    :: MonadFD4 m => TTerm -> CEKEnv -> Kont -> m Val
-seek term p k = case term of 
+seek term p k = case term of
     (Print _ s tm)      -> seek tm p $ PrintEval s : k
     (BinaryOp _ op t u) -> seek t p $ OpLeftEval op p u : k
     (IfZ _ c t u)       -> seek c p $ IfZEval p t u : k
     (App _ t u)         -> seek t p $ AppEval p u : k
-    (V _ (Bound n))     -> destroy (p !! n) k 
-    (V i (Global name)) -> lookupDecl name >>= (\(Just t) ->seek t p k) 
+    (V _ (Bound n))     -> destroy (p !! n) k
+    (V i (Global name)) -> lookupDecl name >>= (\(Just t) ->seek t p k)
     (V _ _)             -> failFD4 "seek no esperaba variables libres"
-    (Const _ (CNat n))  -> destroy (Vall n) k 
+    (Const _ (CNat n))  -> destroy (Vall n) k
     (Lam _ n ty (Sc1 t)) -> destroy (ClosFun p n ty t) k
     (Fix _ n1 ty1 n2 ty2 (Sc2 t)) -> destroy (ClosFix p n1 ty1 n2 ty2 t) k
     -- (Let _ _ _ s (Sc1 t))   -> seek t p $ LetEval p s : k
     (Let info _ _ s (Sc1 t))   -> seek (App info t s) p k
-    
+
 destroy :: MonadFD4 m => Val          -> Kont -> m Val
 destroy v ((PrintEval s):ks) = return v
 destroy v ((OpLeftEval op p t):ks) = seek t p $ OpRightEval op v:ks
-destroy (Vall n') ((OpRightEval op (Vall n)):ks) = return $ Vall $ semOp op n n' 
+destroy (Vall n') ((OpRightEval op (Vall n)):ks) = destroy (Vall (semOp op n n')) ks
 destroy (Vall 0) ((IfZEval p t1 _):ks) = seek t1 p ks
 destroy (Vall n) ((IfZEval p _ t2):ks) = seek t2 p ks
 destroy v ((AppEval p t):ks) = seek t p (Clos v:ks)
-destroy v ((Clos val):ks) = case val of 
-    (ClosFun p _ _ t)     -> trace "PASÉ" $ seek t (v:p) ks 
+destroy v ((Clos val):ks) = case val of
+    (ClosFun p _ _ t)     -> trace "PASÉ" $ seek t (v:p) ks
     (ClosFix p _ _ _ _ t) -> seek t (val:v:p) ks
     _                     -> failFD4 "Destroy esperaba clausura y recibio Vall"
-destroy v [] = return v
+destroy v [] = clean v
 destroy v ks = failFD4 $ "Destroy: valor no contemplado \n\t" ++ show v ++ "\n\t" ++ show ks
-    
+
 -- ToDo: Agregar informa con de nombre
-val2term :: Val -> TTerm 
+val2term :: Val -> TTerm
 val2term (Vall n) = Const (NoPos, NatTy) (CNat n)
 val2term (ClosFun vs n ty t) = Lam (NoPos, FunTy ty (getTy t)) n ty $ Sc1 t
 val2term (ClosFix vs n1 ty1 n2 ty2 t) = Fix (NoPos, ty1) n1 ty1 n2 ty2 $ Sc2 t
 
 
+clean   :: MonadFD4 m => Val -> m Val
+clean (ClosFun p' n' ty' t') = return $ ClosFun p' n' ty' $ 
+    varChanger 
+        (\ _ p y -> V p (Free y)) 
+        (\ i p m -> if m /= 0 && m <= lengthPendientes then val2term (p' !! (m - 1)) else V p (Bound m)) 
+        t'
+    where
+    lengthPendientes = length p'
+clean v = return v
 
-
+-- (fun (z:Nat) -> fun (x:Nat) -> fun (y:Nat) -> x+y+z) 1 2
+-- (fun (w:Nat) -> fun (z:Nat) -> fun (x:Nat) -> fun (y:Nat) -> x+y+w+z) 8 9
