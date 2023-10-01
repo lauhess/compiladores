@@ -37,6 +37,7 @@ import PPrint ( pp , ppTy, ppDecl )
 import MonadFD4
 import TypeChecker ( tc, tcDecl )
 import CEK
+import Debug.Trace
 
 prompt :: String
 prompt = "FD4> "
@@ -170,7 +171,11 @@ handleDecl' d = do
             (Decl p x t tt) <- typecheckDecl d
             v <- seek tt [] []
             printFD4 $ show v
-
+            let tt' = val2term v 
+            let decl' = Decl p x t tt'
+            ppterm <- ppDecl decl'
+            trace ppterm $ printFD4 ppterm
+            addDecl $ Decl p x t $ val2term v
 
       where
         typecheckDecl :: MonadFD4 m => Decl STerm -> m (Decl TTerm)
@@ -260,14 +265,36 @@ compilePhrase x = do
       Left d  -> handleDecl d
       Right t -> handleTerm t
 
+-- handleTerm ::  MonadFD4 m => STerm -> m ()
+-- handleTerm t = do
+--         t' <- elab t
+--         s <- get
+--         tt <- tc t' (tyEnv s)
+--         te <- eval tt
+--         ppte <- pp te
+--         printFD4 (ppte ++ " : " ++ ppTy (getTy tt))
+
 handleTerm ::  MonadFD4 m => STerm -> m ()
 handleTerm t = do
+         m <- getMode
          t' <- elab t
          s <- get
          tt <- tc t' (tyEnv s)
-         te <- eval tt
-         ppte <- pp te
-         printFD4 (ppte ++ " : " ++ ppTy (getTy tt))
+         case m of 
+          InteractiveCEK -> do 
+            printFD4 "Evaluando sobre Máquina CEK"
+            printFD4 $ show tt
+            v <- seek tt [] []
+            printFD4 $ show v
+            let te = val2term v 
+            printFD4 $ show te
+            ppte <- pp te
+            -- (fun (x:Nat) -> fun (y:Nat) -> x+y) 10
+            printFD4 (ppte ++ " : " ++ ppTy (getTy tt))
+          _ -> do
+            te <- eval tt
+            ppte <- pp te
+            printFD4 (ppte ++ " : " ++ ppTy (getTy tt))
 
 printPhrase   :: MonadFD4 m => String -> m ()
 printPhrase x =

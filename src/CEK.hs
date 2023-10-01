@@ -1,9 +1,10 @@
+{-# LANGUAGE LambdaCase #-}
 module CEK where
 import Lang
 import MonadFD4
 import Eval (semOp)
-import Debug.Trace (trace)
 import Common (Pos(..))
+import Debug.Trace
 
 data Frame = 
     AppEval CEKEnv TTerm
@@ -19,8 +20,8 @@ type Kont = [Frame]
 
 data Val = 
       Vall Int 
-    | ClosFun [Val] TTerm
-    | ClosFix [Val] TTerm
+    | ClosFun [Val] Name Ty TTerm
+    | ClosFix [Val] Name Ty Name Ty TTerm
     deriving Show
     -- | ClosLet [Val] Var TTerm TTerm
 
@@ -36,8 +37,8 @@ seek term p k = case term of
     (V i (Global name)) -> lookupDecl name >>= (\(Just t) ->seek t p k) 
     (V _ _)             -> failFD4 "seek no esperaba variables libres"
     (Const _ (CNat n))  -> destroy (Vall n) k 
-    (Lam _ _ _ (Sc1 t)) -> destroy (ClosFun p t) k
-    (Fix _ _ _ _ _ (Sc2 t)) -> destroy (ClosFix p t) k
+    (Lam _ n ty (Sc1 t)) -> destroy (ClosFun p n ty t) k
+    (Fix _ n1 ty1 n2 ty2 (Sc2 t)) -> destroy (ClosFix p n1 ty1 n2 ty2 t) k
     -- (Let _ _ _ s (Sc1 t))   -> seek t p $ LetEval p s : k
     (Let info _ _ s (Sc1 t))   -> seek (App info t s) p k
     
@@ -49,17 +50,17 @@ destroy (Vall 0) ((IfZEval p t1 _):ks) = seek t1 p ks
 destroy (Vall n) ((IfZEval p _ t2):ks) = seek t2 p ks
 destroy v ((AppEval p t):ks) = seek t p (Clos v:ks)
 destroy v ((Clos val):ks) = case val of 
-    (ClosFun p t) -> seek t (v:p) ks 
-    (ClosFix p t) -> seek t (val:v:p) ks
-    _             -> failFD4 "Destroy esperaba clausura y recibio Vall"
+    (ClosFun p _ _ t)     -> trace "PASÉ" $ seek t (v:p) ks 
+    (ClosFix p _ _ _ _ t) -> seek t (val:v:p) ks
+    _                     -> failFD4 "Destroy esperaba clausura y recibio Vall"
 destroy v [] = return v
 destroy v ks = failFD4 $ "Destroy: valor no contemplado \n\t" ++ show v ++ "\n\t" ++ show ks
     
 -- ToDo: Agregar informa con de nombre
-val2term :: Val -> Term 
-val2term (Vall n) = Const NoPos (CNat n)
-val2term (ClosFun vs t) = Lam NoPos "" $ Scope NoPos (val2term t)
-val2term (ClosFix vs t) =
+val2term :: Val -> TTerm 
+val2term (Vall n) = Const (NoPos, NatTy) (CNat n)
+val2term (ClosFun vs n ty t) = Lam (NoPos, FunTy ty (getTy t)) n ty $ Sc1 t
+val2term (ClosFix vs n1 ty1 n2 ty2 t) = Fix (NoPos, ty1) n1 ty1 n2 ty2 $ Sc2 t
 
 
 

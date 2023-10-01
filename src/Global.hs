@@ -39,6 +39,7 @@ data Mode =
   -- | Canon
   -- | Assembler
   -- | Build
+  deriving Show
 data Conf = Conf {
     opt :: Bool,          --  ^ True, si estan habilitadas las optimizaciones.
     modo :: Mode
