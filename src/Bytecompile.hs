@@ -99,9 +99,50 @@ showOps (x:xs)           = show x : showOps xs
 showBC :: Bytecode -> String
 showBC = intercalate "; " . showOps
 
+-- Compila un término a bytecode
 bcc :: MonadFD4 m => TTerm -> m Bytecode
-bcc t = failFD4 "implementame!"
-
+bcc t = case t of 
+  V _ _ -> failFD4 "implementame!"
+  Const _ (CNat n) -> return [CONST, fromIntegral n]
+  Lam _ _ _ (Sc1 t1) -> do 
+    bt <- bcc t
+    return $ [FUNCTION, length bt] ++ bt ++ [RETURN]
+  App _ t1 t2 -> do 
+    b1 <- bcc t1
+    b2 <- bcc t2
+    return $ b1 ++ b2 ++ [CALL]
+  Print _ str t1 -> do 
+    bt <- bcc t 
+    return $ [length str] ++ string2bc str ++ [PRINT] ++ bt ++ [PRINTN] 
+  BinaryOp _ Add t1 t2 -> do 
+    b1 <- bcc t1
+    b2 <- bcc t2
+    return $ b1 ++ b2 ++ [ADD]
+  BinaryOp _ Sub t1 t2 -> do 
+    b1 <- bcc t1
+    b2 <- bcc t2  
+    return $ b1 ++ b2 ++ [SUB]
+  Fix _ _ _ _ _ (Sc2 t1) -> do 
+    b1 <- bcc t1
+    return $ [FUNCTION, length b1] ++ b1 ++ [FIX]
+  IfZ _ c t1 t2 -> do 
+    bc <- bcc c
+    b1 <- bcc t1
+    b2 <- bcc t2
+    return $ bc ++ [JUMP, length b1] ++ b1 ++ [JUMP, length b2] ++ b2
+    -- [c, JUMP, l1, x1, x2, ..., xn, JUMP, l2, y1, y2, ..., ym]
+    --  0, 1,     2, 2 + 1, 2 + 2, 2 + n, 2 + n + 1, 2+n+2,2+n+m]   
+    -- - Si c == 1, seguimos ejecutando en la vm, 
+    --   luego llegaremos a un JUMP que indica el comienzo del "else" 
+    --   que obviamente saltearemos
+    -- - Sino, hacemos un salto de n + 1 (JUMP y el largo de b1), y ejecutamos
+    --   la condición del else.
+    -- ToDo: Pensar casos de ifz anidados
+  Let _ _ _ t1 (Sc1 t2) -> do 
+    b1 <- bcc t1
+    b2 <- bcc t2
+    return $ b1 ++ [SHIFT] ++ b2 ++ [DROP]
+  
 -- ord/chr devuelven los codepoints unicode, o en otras palabras
 -- la codificación UTF-32 del caracter.
 string2bc :: String -> Bytecode
@@ -110,6 +151,7 @@ string2bc = map ord
 bc2string :: Bytecode -> String
 bc2string = map chr
 
+type Module = [(Name, TTerm)]
 bytecompileModule :: MonadFD4 m => Module -> m Bytecode
 bytecompileModule m = failFD4 "implementame!"
 
