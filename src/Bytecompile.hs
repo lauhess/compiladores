@@ -16,7 +16,6 @@ module Bytecompile
  where
 
 import Lang
-import Subst
 import MonadFD4
 
 import qualified Data.ByteString.Lazy as BS
