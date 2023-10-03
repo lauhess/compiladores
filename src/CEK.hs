@@ -21,7 +21,6 @@ data Val =
     | ClosFun [Val] Name Ty TTerm
     | ClosFix [Val] Name Ty Name Ty TTerm
     deriving Show
-    -- | ClosLet [Val] Var TTerm TTerm
 
 type CEKEnv = [Val]
 
@@ -37,8 +36,7 @@ seek term p k = case term of
     (Const _ (CNat n))  -> destroy (Vall n) k
     (Lam _ n ty (Sc1 t)) -> destroy (ClosFun p n ty t) k
     (Fix _ n1 ty1 n2 ty2 (Sc2 t)) -> destroy (ClosFix p n1 ty1 n2 ty2 t) k
-    -- (Let _ _ _ s (Sc1 t))   -> seek t p $ LetEval p s : k
-    (Let info _ _ s (Sc1 t))   -> seek (App info t s) p k
+    (Let info n ty s (Sc1 t))   -> seek (App info (Lam info n ty (Sc1 t)) s) p k
 
 destroy :: MonadFD4 m => Val          -> Kont -> m Val
 destroy v ((PrintEval s):ks) = return v
@@ -60,11 +58,13 @@ val2term (Vall n) = Const (NoPos, NatTy) (CNat n)
 val2term (ClosFun vs n ty t) = let
     -- Todo: Refactorizar esto
     vs' = zip vs (reverse [1 .. (length vs)])
-    c = foldl (\ term (caso, i) -> trace ("\t-Reemplazando " ++ show caso ++ " en " ++ show term ++ "\n") subst' i (val2term caso) (Sc1 term)) t vs'
+    c = foldl (\ term (caso, i) -> subst' i (val2term caso) (Sc1 term)) t vs'
     r = Lam (NoPos, FunTy ty (getTy t)) n ty $ Sc1 c
-    in trace (show r) r
-    
-val2term (ClosFix vs n1 ty1 n2 ty2 t) = Fix (NoPos, ty1) n1 ty1 n2 ty2 $ Sc2 t
+    in trace (show r) r    
+val2term (ClosFix vs n1 ty1 n2 ty2 t) = let
+    vs' = zip vs (reverse [1 .. (length vs)])
+    c = foldl (\ term (caso, i) -> trace ("\t-Reemplazando " ++ show caso ++ " en " ++ show term ++ "\n") subst' i (val2term caso) (Sc1 term)) t vs'
+    in Fix (NoPos, ty1) n1 ty1 n2 ty2 $ Sc2 c
 
 -- (fun (z:Nat) -> fun (x:Nat) -> fun (y:Nat) -> x+y+z) 1 2
 -- (fun (w:Nat) -> fun (z:Nat) -> fun (x:Nat) -> fun (y:Nat) -> x+y+w+z) 8 9
