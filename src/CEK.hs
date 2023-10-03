@@ -1,7 +1,6 @@
-{-# LANGUAGE LambdaCase #-}
 module CEK where
 import Lang
-import MonadFD4
+import MonadFD4 ( MonadFD4, lookupDecl, failFD4 )
 import Eval (semOp)
 import Common (Pos(..))
 import Debug.Trace

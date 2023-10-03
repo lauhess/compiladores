@@ -171,11 +171,11 @@ isRecursive :: P Bool
 isRecursive = try (reserved "rec" >> return True) <|> return False
 
 letFunction :: P [(Name, SType)]
-letFunction = do 
+letFunction = do
   name <- var
-  binds <- binders 
+  binds <- binders
   reserved ":"
-  myType <- typeP 
+  myType <- typeP
   return ((name,myType) : binds)
 
 letexp :: P STerm
@@ -220,8 +220,8 @@ typeDefDecl = do
 
 -- | Parser de declaraciones
 decl :: P (SDecl  STerm)
-decl = letDecl <|> typeDefDecl
-     
+decl = try letDecl <|> typeDefDecl
+
 
 -- | Parser de programas (listas de declaraciones) 
 program :: P [SDecl STerm]
@@ -230,7 +230,7 @@ program = many decl
 -- | Parsea una declaración a un término
 -- Útil para las sesiones interactivas
 declOrTm :: P (Either (SDecl STerm) STerm)
-declOrTm =  try (Left <$> decl) <|> (Right <$> expr)
+declOrTm =  try (Right <$> expr) <|> (Left <$> decl)
 
 -- Corre un parser, chequeando que se pueda consumir toda la entrada
 runP :: P a -> String -> String -> Either ParseError a

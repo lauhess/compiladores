@@ -60,7 +60,7 @@ elab' env (SApp p h a) = do
   return $ App p hElab aElab
   --Let p v vty (elab' env def) (close v (elab' (v:env) body))
 elab' env (SLet p recursive bs def body) = do
-  elabType <- elabSTy $ snd (head bs)
+  -- elabType <- elabSTy $ snd (head bs)
   elabLet p env recursive (head bs) (tail bs) def body
 elab' env (SFix info [(f, fty),(x, xty)] body) = do
   bElab <- elabClose2 f x env body
@@ -88,12 +88,12 @@ elabLet p env  False (v, vty') [] def body = do          -- Definicion original 
   defElab <- elab' env def
   bodyElab <- elabClose v env body
   return $ Let p v vty defElab bodyElab
-elabLet p env  False (v, vty') [(x,xty)] def body = do   -- Definicion funcion ariedad 1
-  vty <- elabSTy vty'
+elabLet p env  False (v, vty) [(x,xty)] def body = do   -- Definicion funcion ariedad 1
+  vType <- elabSTy vty
   defElab <- elab' env (SLam p [(x,xty)] def)
   xType <- elabSTy xty
-  bodyElab <- elabClose x env body
-  return $ Let p v (FunTy xType vty) defElab bodyElab
+  bodyElab <- elabClose v env body
+  return $ Let p v (FunTy xType vType) defElab bodyElab
 elabLet p env  False (v, vty') xs def body = do          -- Definicion funcion ariedad n
   vty <- elabSTy vty'
   fty <- makeType xs vty
