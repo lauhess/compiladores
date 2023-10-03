@@ -32,6 +32,9 @@ type Bytecode = [Int]
 
 newtype Bytecode32 = BC { un32 :: [Word32] }
 
+type Env = [Int]
+data Val = I Int | Fun Env Bytecode | RA Env Bytecode
+
 {- Esta instancia explica como codificar y decodificar Bytecode de 32 bits -}
 instance Binary Bytecode32 where
   put (BC bs) = mapM_ putWord32le bs
@@ -151,7 +154,7 @@ string2bc = map ord
 bc2string :: Bytecode -> String
 bc2string = map chr
 
-type Module = [(Name, TTerm)]
+type Module = ()
 bytecompileModule :: MonadFD4 m => Module -> m Bytecode
 bytecompileModule m = failFD4 "implementame!"
 
@@ -167,5 +170,19 @@ bcWrite bs filename = BS.writeFile filename (encode $ BC $ fromIntegral <$> bs)
 bcRead :: FilePath -> IO Bytecode
 bcRead filename = (map fromIntegral <$> un32) . decode <$> BS.readFile filename
 
+
 runBC :: MonadFD4 m => Bytecode -> m ()
-runBC bc = failFD4 "implementame!"
+runBC bc = void $ runBC' bc [] [] 
+
+runBC' :: MonadFD4 m => Bytecode -> [Val] -> [Val] -> m Val
+runBC' bs e c = case bs of
+  []              -> (return . head) c
+  (NULL:xs)       -> runBC' xs e c
+  (RETURN:xs)     -> let (val : RA e' bs' : c') = c
+                      in runBC' bs' e (val : c')
+  (CONST:i:xs)    -> runBC' xs e (I i:c)
+  (ACCESS:i:xs)   -> runBC' xs e (e !! i : c)
+  (FUNCTION:i:xs) -> let bs' = take i xs
+                      in runBC' xs e (Fun e bs' : c)
+  _               -> undefined
+  
