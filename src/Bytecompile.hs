@@ -26,6 +26,7 @@ import Data.Binary.Get ( getWord32le, isEmpty )
 import Data.List (intercalate)
 import Data.Char
 import Eval (semOp)
+import Subst
 
 type Opcode = Int
 type Bytecode = [Int]
@@ -105,7 +106,9 @@ showBC = intercalate "; " . showOps
 -- Compila un término a bytecode
 bcc :: MonadFD4 m => TTerm -> m Bytecode
 bcc t = case t of
-  V _ _ -> failFD4 "implementame!"
+  V _ (Free _) -> failFD4 "implementame!"
+  V _ (Bound i) -> return [ACCESS, i]
+  V _ (Global _) -> failFD4 "implementame!"
   Const _ (CNat n) -> return [CONST, fromIntegral n]
   Lam _ _ _ (Sc1 t1) -> do
     bt <- bcc t
@@ -155,7 +158,14 @@ bc2string :: Bytecode -> String
 bc2string = map chr
 
 bytecompileModule :: MonadFD4 m => Module -> m Bytecode
-bytecompileModule m = failFD4 "implementame!"
+bytecompileModule m = bytecompileModule' m []
+
+bytecompileModule' :: MonadFD4 m => Module -> Bytecode -> m Bytecode
+bytecompileModule' [] bcs = return $ bcs ++ [STOP] 
+bytecompileModule' ((Decl _ x ty t):ds) bcs = do
+  let (Sc1 t') = close x t
+  bcc_t' <- bcc t'
+  bytecompileModule' ds (bcc_t' ++ bcs)
 
 -- | Toma un bytecode, lo codifica y lo escribe un archivo
 bcWrite :: Bytecode -> FilePath -> IO ()
