@@ -38,7 +38,10 @@ type Bytecode = [Int]
 newtype Bytecode32 = BC { un32 :: [Word32] }
 
 type Env = [Val]
-data Val = I Int | Fun Env Bytecode | RA Env Bytecode
+data Val = I Int | Fun Env Bytecode | RA Env Bytecode deriving Show
+printVals :: MonadFD4 m => Bool -> Bytecode -> Env -> [Val] -> m ()
+printVals True x e vs = printFD4 $ "Next: " ++ intercalate "; " (showOps x) ++ "\nEnv: " ++ intercalate ", " (map show e) ++ "\nPila: " ++ intercalate ", " (map show vs) ++ "\n"
+printVals False _ _ _ = return ()
 
 {- Esta instancia explica como codificar y decodificar Bytecode de 32 bits -}
 instance Binary Bytecode32 where
@@ -117,14 +120,14 @@ bcc t = pp t  >> case t of
   Lam _ _ _ (Sc1 t1) -> do
     printFD4 $ show t1
     bt <- bcc t1
-    return $ [FUNCTION, length bt] ++ bt ++ [RETURN]
+    return $ [FUNCTION, length bt + 1] ++ bt ++ [RETURN]
   App _ t1 t2 -> do
     b1 <- bcc t1
     b2 <- bcc t2
     return $ b1 ++ b2 ++ [CALL]
   Print _ str t1 -> do
     bt <- bcc t1
-    return $ [length str] ++ string2bc str ++ [PRINT] ++ bt ++ [PRINTN]
+    return $ [PRINT] ++ string2bc str ++ [NULL] ++ bt ++ [NULL, PRINTN] 
   BinaryOp _ Add t1 t2 -> do
     b1 <- bcc t1
     b2 <- bcc t2
@@ -135,7 +138,7 @@ bcc t = pp t  >> case t of
     return $ b1 ++ b2 ++ [SUB]
   Fix _ _ _ _ _ (Sc2 t1) -> do
     b1 <- bcc t1
-    return $ [FUNCTION, length b1] ++ b1 ++ [RETURN, FIX]
+    return $ [FUNCTION, length b1 + 1] ++ b1 ++ [RETURN, FIX]
   IfZ _ c t1 t2 -> do
     bc <- bcc c
     b1 <- bcc t1
@@ -166,12 +169,12 @@ bytecompileModule :: MonadFD4 m => Module -> m Bytecode
 -- bytecompileModule m = bytecompileModule' m []
 bytecompileModule [] = return [STOP]
 -- bytecompileModule m = bcc (decl2term m) >>= (\bc -> return (bc ++ [STOP]))
-bytecompileModule m = do 
+bytecompileModule m = do
     let t = decl2term m
-    pt <- pp t 
-    printFD4 pt 
+    pt <- pp t
+    printFD4 pt
     bc <- bcc t
-    printFD4 $ intercalate "\n" $ showOps bc
+    -- printFD4 $ intercalate "\n" $ showOps bc
     return (bc ++ [STOP])
 -- bytecompileModule' :: MonadFD4 m => Module -> Bytecode -> m Bytecode
 -- bytecompileModule' [] bcs = return $ bcs ++ [STOP]
@@ -208,17 +211,17 @@ runBC :: MonadFD4 m => Bytecode -> m ()
 runBC bc = void $ runBC' bc [] []
 
 runBC' :: MonadFD4 m => Bytecode -> Env -> [Val] -> m Val
-runBC' bs e s = case bs of
+runBC' bs e s = printVals True bs e s >> case bs of
   []              -> return (head s)
   (NULL:xs)       -> runBC' xs e s
   (RETURN:xs)     -> let (val : RA e' bs' : s') = s
-                      in runBC' bs' e (val : s')
+                      in runBC' bs' e' (val : s')
   (CONST:i:xs)    -> runBC' xs e (I i:s)
   (ACCESS:i:xs)   -> runBC' xs e ( e !! i : s)
   (FUNCTION:i:xs) -> let bs' = take i xs
-                      in runBC' xs e (Fun e bs' : s)
+                      in runBC' (drop i xs) e (Fun e bs' : s)
   (CALL:xs)       -> let (v: (Fun ef cf) : s') = s
-                      in runBC' cf (v:ef) (RA e xs:s)
+                      in runBC' cf (v:ef) (RA e xs:s')
   (ADD:xs)        -> let (I x : I y : s') = s
                       in runBC' xs e (I (semOp Add x y):s')
   (SUB:xs)        -> let (I x : I y : s') = s
@@ -230,7 +233,8 @@ runBC' bs e s = case bs of
   (SHIFT:xs)      -> runBC' xs (head s : e) (tail s)
   (DROP:xs)       -> runBC' xs (tail e) s
   (PRINT:xs)      -> let (str, NULL:xs') = span (\x -> x /= NULL) xs
-                      in printFD4 (bc2string str) >> runBC' xs' e s
+                         (bc, NULL:xs'') = span (\x -> x /= NULL) xs'
+                      in printFD4 (bc2string str) >> runBC' bc e s >>= \v -> runBC' xs'' e (v:s)
   (PRINTN:xs)     -> let (I n : _) = s
                       in printFD4 (show n) >> runBC' xs e s
   (x:xs)          -> failFD4 $ "opcode desconocido: " ++ show x

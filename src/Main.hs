@@ -38,7 +38,7 @@ import MonadFD4
 import TypeChecker ( tc, tcDecl )
 import CEK
 import GHC.Base (sequence)
-import Bytecompile (bytecompileModule, bcWrite)
+import Bytecompile (bytecompileModule, bcWrite, bcRead, runBC)
 
 prompt :: String
 prompt = "FD4> "
@@ -80,6 +80,8 @@ main = execParser opts >>= go
               runOrFail (Conf opt Interactive) (runInputT defaultSettings (repl files))
     go (Bytecompile, opt, files) =
               runOrFail (Conf opt Bytecompile) $ mapM_ byteCompileFile  files
+    go (RunVM, opt, files) =
+              runOrFail (Conf opt RunVM) $ mapM_ byteRunVmFile files
     go (m,opt, files) =
               runOrFail (Conf opt m) $ mapM_ compileFile files
 
@@ -145,6 +147,13 @@ byteCompileFile f = do
     let fp = (reverse . dropWhile (/= '.') . reverse) f ++ "bc"
     printFD4 $ "Escribiendo bytecode a " ++ fp
     liftIO (bcWrite bytecode fp)
+
+byteRunVmFile :: MonadFD4 m => FilePath -> m ()
+byteRunVmFile f = do
+  printFD4 ("Abriendo " ++ f ++ "...")
+  bs <- liftIO $ bcRead f
+  r <- runBC bs
+  printFD4 (show r)
 
 parseIO ::  MonadFD4 m => String -> P a -> String -> m a
 parseIO filename p x = case runP p x filename of
