@@ -37,6 +37,8 @@ import PPrint ( pp , ppTy, ppDecl )
 import MonadFD4
 import TypeChecker ( tc, tcDecl )
 import CEK
+import GHC.Base (sequence)
+import Bytecompile (bytecompileModule, bcWrite)
 
 prompt :: String
 prompt = "FD4> "
@@ -48,8 +50,8 @@ parseMode :: Parser (Mode,Bool)
 parseMode = (,) <$>
       (flag' Typecheck ( long "typecheck" <> short 't' <> help "Chequear tipos e imprimir el término")
      <|> flag' InteractiveCEK (long "interactiveCEK" <> short 'k' <> help "Ejecutar interactivamente en la CEK")
-  -- <|> flag' Bytecompile (long "bytecompile" <> short 'm' <> help "Compilar a la BVM")
-  -- <|> flag' RunVM (long "runVM" <> short 'r' <> help "Ejecutar bytecode en la BVM")
+      <|> flag' Bytecompile (long "bytecompile" <> short 'm' <> help "Compilar a la BVM")
+      <|> flag' RunVM (long "runVM" <> short 'r' <> help "Ejecutar bytecode en la BVM")
       <|> flag Interactive Interactive ( long "interactive" <> short 'i' <> help "Ejecutar en forma interactiva")
       <|> flag Eval        Eval        (long "eval" <> short 'e' <> help "Evaluar programa")
   -- <|> flag' CC ( long "cc" <> short 'c' <> help "Compilar a código C")
@@ -76,6 +78,8 @@ main = execParser opts >>= go
     go :: (Mode,Bool,[FilePath]) -> IO ()
     go (Interactive,opt,files) =
               runOrFail (Conf opt Interactive) (runInputT defaultSettings (repl files))
+    go (Bytecompile, opt, files) =
+              runOrFail (Conf opt Bytecompile) $ mapM_ byteCompileFile  files
     go (m,opt, files) =
               runOrFail (Conf opt m) $ mapM_ compileFile files
 
@@ -109,7 +113,7 @@ repl args = do
 
 loadFile ::  MonadFD4 m => FilePath -> m [SDecl STerm]
 loadFile f = do
-    
+
     let filename = reverse(dropWhile isSpace (reverse f))
     x <- liftIO $ catch (readFile filename)
                (\e -> do let err = show (e :: IOException)
@@ -127,6 +131,21 @@ compileFile f = do
     mapM_ handleDecl decls
     setInter i
 
+byteCompileFile ::  MonadFD4 m => FilePath -> m ()
+byteCompileFile f = do
+    printFD4 ("Abriendo " ++ f ++ "...")
+    sdecls <- loadFile f
+    mdecls <- mapM elabDecl sdecls
+    let sdecl = GHC.Base.sequence mdecls
+    prog <- case sdecl of
+      Nothing -> failFD4 "Error de compilacion"
+      Just decl ->  mapM (\sd -> typecheckDecl sd >>= \d -> addDecl d >> return d) decl
+    printFD4 $  "Compilando " ++ f ++ " a bytecode "
+    bytecode <- bytecompileModule prog
+    let fp = (reverse . dropWhile (/= '.') . reverse) f ++ "bc"
+    printFD4 $ "Escribiendo bytecode a " ++ fp
+    liftIO (bcWrite bytecode fp)
+
 parseIO ::  MonadFD4 m => String -> P a -> String -> m a
 parseIO filename p x = case runP p x filename of
                   Left e  -> throwError (ParseErr e)
@@ -138,10 +157,10 @@ evalDecl (Decl p x t e) = do
     return (Decl p x t e')
 
 handleDecl ::  MonadFD4 m => SDecl STerm -> m ()
-handleDecl d = elabDecl d >>= \case 
+handleDecl d = elabDecl d >>= \case
   (Just d') -> handleDecl' d'
   Nothing   -> return ()
-    
+
 handleDecl' ::  MonadFD4 m => Decl STerm -> m ()
 handleDecl' d = do
         m <- getMode
@@ -164,16 +183,15 @@ handleDecl' d = do
               -- td' <- if opt then optimizeDecl td else return td
               ed <- evalDecl td
               addDecl ed
-          InteractiveCEK -> do 
+          InteractiveCEK -> do
             (Decl p x t tt) <- typecheckDecl d
             v <- seek tt [] []
             printFD4 $ show v
+          _ -> undefined  
 
-
-      where
-        typecheckDecl :: MonadFD4 m => Decl STerm -> m (Decl TTerm)
-        typecheckDecl (Decl p x ty t) = elab t >>= \term -> 
-          tcDecl (Decl p x ty term)
+typecheckDecl :: MonadFD4 m => Decl STerm -> m (Decl TTerm)
+typecheckDecl (Decl p x ty t) = elab t >>= \term ->
+  tcDecl (Decl p x ty term)
 
 
 data Command = Compile CompileForm

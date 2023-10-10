@@ -18,6 +18,9 @@ module Bytecompile
 import Lang
 import MonadFD4
 
+import Debug.Trace (trace)
+
+
 import qualified Data.ByteString.Lazy as BS
 import Data.Binary ( Word32, Binary(put, get), decode, encode )
 import Data.Binary.Put ( putWord32le )
@@ -27,6 +30,7 @@ import Data.List (intercalate)
 import Data.Char
 import Eval (semOp)
 import Subst
+import PPrint (pp)
 
 type Opcode = Int
 type Bytecode = [Int]
@@ -105,20 +109,21 @@ showBC = intercalate "; " . showOps
 
 -- Compila un término a bytecode
 bcc :: MonadFD4 m => TTerm -> m Bytecode
-bcc t = case t of
-  V _ (Free _) -> failFD4 "implementame!"
+bcc t = pp t  >> case t of
+  V _ (Free _) -> failFD4 "implementame! (Bytecompile:112)"
   V _ (Bound i) -> return [ACCESS, i]
-  V _ (Global _) -> failFD4 "implementame!"
+  V _ (Global _) -> failFD4 "implementame! (Bytecompile:114)"
   Const _ (CNat n) -> return [CONST, fromIntegral n]
   Lam _ _ _ (Sc1 t1) -> do
-    bt <- bcc t
+    printFD4 $ show t1
+    bt <- bcc t1
     return $ [FUNCTION, length bt] ++ bt ++ [RETURN]
   App _ t1 t2 -> do
     b1 <- bcc t1
     b2 <- bcc t2
     return $ b1 ++ b2 ++ [CALL]
   Print _ str t1 -> do
-    bt <- bcc t
+    bt <- bcc t1
     return $ [length str] ++ string2bc str ++ [PRINT] ++ bt ++ [PRINTN]
   BinaryOp _ Add t1 t2 -> do
     b1 <- bcc t1
@@ -158,14 +163,33 @@ bc2string :: Bytecode -> String
 bc2string = map chr
 
 bytecompileModule :: MonadFD4 m => Module -> m Bytecode
-bytecompileModule m = bytecompileModule' m []
+-- bytecompileModule m = bytecompileModule' m []
+bytecompileModule [] = return [STOP]
+-- bytecompileModule m = bcc (decl2term m) >>= (\bc -> return (bc ++ [STOP]))
+bytecompileModule m = do 
+    let t = decl2term m
+    pt <- pp t 
+    printFD4 pt 
+    bc <- bcc t
+    printFD4 $ intercalate "\n" $ showOps bc
+    return (bc ++ [STOP])
+-- bytecompileModule' :: MonadFD4 m => Module -> Bytecode -> m Bytecode
+-- bytecompileModule' [] bcs = return $ bcs ++ [STOP]
+-- -- bytecompileModule' ((Decl _ x ty t):ds) bcs = do
+-- --   let (Sc1 t') = close x t
+-- --   bcc_t' <- bcc t'
+-- --   bytecompileModule' ds (bcc_t' ++ bcs)
+-- -- bytecompileModule' ((Decl _ x ty t):ds) bcs = 
 
-bytecompileModule' :: MonadFD4 m => Module -> Bytecode -> m Bytecode
-bytecompileModule' [] bcs = return $ bcs ++ [STOP] 
-bytecompileModule' ((Decl _ x ty t):ds) bcs = do
-  let (Sc1 t') = close x t
-  bcc_t' <- bcc t'
-  bytecompileModule' ds (bcc_t' ++ bcs)
+
+decl2term :: Module -> TTerm
+decl2term [Decl info x ty t] = liverator t
+decl2term ((Decl info x ty t):ds) =
+  let ts = decl2term ds
+      t' = liverator t
+      body = close x ts
+  in Let (info, ty) x ty t' body
+decl2term [] = undefined
 
 -- | Toma un bytecode, lo codifica y lo escribe un archivo
 bcWrite :: Bytecode -> FilePath -> IO ()
@@ -210,3 +234,17 @@ runBC' bs e s = case bs of
   (PRINTN:xs)     -> let (I n : _) = s
                       in printFD4 (show n) >> runBC' xs e s
   (x:xs)          -> failFD4 $ "opcode desconocido: " ++ show x
+
+
+liverator :: TTerm -> TTerm
+liverator   v@(V p (Bound i)) = v
+liverator   v@(V p (Free x)) = v
+liverator   (V p (Global x)) = V p (Free x)
+liverator (Lam p y ty (Sc1 t))   = Lam p y ty (Sc1 (liverator t))
+liverator (App p l r)   = App p (liverator l) (liverator r)
+liverator (Fix p f fty x xty (Sc2 t)) = Fix p f fty x xty (Sc2 (liverator t))
+liverator (IfZ p c t e) = IfZ p (liverator c) (liverator t) (liverator e)
+liverator t@(Const _ _) = t
+liverator (Print p str t) = Print p str (liverator t)
+liverator (BinaryOp p op t u) = BinaryOp p op (liverator t) (liverator u)
+liverator (Let p v vty m (Sc1 o)) = Let p v vty (liverator m) (Sc1 (liverator o))
