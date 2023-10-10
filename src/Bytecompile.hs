@@ -127,7 +127,7 @@ bcc t = case t of
     return $ b1 ++ b2 ++ [SUB]
   Fix _ _ _ _ _ (Sc2 t1) -> do
     b1 <- bcc t1
-    return $ [FUNCTION, length b1] ++ b1 ++ [FIX]
+    return $ [FUNCTION, length b1] ++ b1 ++ [RETURN, FIX]
   IfZ _ c t1 t2 -> do
     bc <- bcc c
     b1 <- bcc t1
@@ -175,7 +175,7 @@ runBC bc = void $ runBC' bc [] []
 
 runBC' :: MonadFD4 m => Bytecode -> Env -> [Val] -> m Val
 runBC' bs e s = case bs of
-  []              -> (return . head) s
+  []              -> return (head s)
   (NULL:xs)       -> runBC' xs e s
   (RETURN:xs)     -> let (val : RA e' bs' : s') = s
                       in runBC' bs' e (val : s')
@@ -189,11 +189,14 @@ runBC' bs e s = case bs of
                       in runBC' xs e (I (semOp Add x y):s')
   (SUB:xs)        -> let (I x : I y : s') = s
                       in runBC' xs e (I (semOp Sub x y):s')
-  (FIX:xs)        -> undefined
-  (STOP:xs)       -> undefined
-  (JUMP:i:xs)     -> undefined
+  (FIX:xs)        -> let efix = RA efix xs : e
+                      in runBC' xs efix s
+  (STOP:xs)       -> return (head s)
+  (JUMP:i:xs)     -> runBC' (drop i xs) e s
   (SHIFT:xs)      -> runBC' xs (head s : e) (tail s)
   (DROP:xs)       -> runBC' xs (tail e) s
-  (PRINT:xs)      -> undefined
-  (PRINTN:xs)     -> undefined
-  (x:xs)          -> undefined
+  (PRINT:xs)      -> let (str, NULL:xs') = span (\x -> x /= NULL) xs
+                      in printFD4 (bc2string str) >> runBC' xs' e s
+  (PRINTN:xs)     -> let (I n : _) = s
+                      in printFD4 (show n) >> runBC' xs e s
+  (x:xs)          -> failFD4 $ "opcode desconocido: " ++ show x
