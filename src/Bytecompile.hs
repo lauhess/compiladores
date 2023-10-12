@@ -31,6 +31,7 @@ import Data.Char
 import Eval (semOp)
 import Subst
 import PPrint (pp)
+import Data.ByteString (split)
 
 type Opcode = Int
 type Bytecode = [Int]
@@ -127,7 +128,8 @@ bcc t = pp t  >> case t of
     return $ b1 ++ b2 ++ [CALL]
   Print _ str t1 -> do
     bt <- bcc t1
-    return $ [PRINT] ++ string2bc str ++ [NULL] ++ bt ++ [NULL, PRINTN] 
+    let sbc = string2bc str
+    return $ [PRINT, length sbc] ++ sbc ++ [NULL, length bt] ++ bt ++ [NULL, PRINTN] 
   BinaryOp _ Add t1 t2 -> do
     b1 <- bcc t1
     b2 <- bcc t2
@@ -232,9 +234,13 @@ runBC' bs e s = printVals True bs e s >> case bs of
   (JUMP:i:xs)     -> runBC' (drop i xs) e s
   (SHIFT:xs)      -> runBC' xs (head s : e) (tail s)
   (DROP:xs)       -> runBC' xs (tail e) s
-  (PRINT:xs)      -> let (str, NULL:xs') = span (\x -> x /= NULL) xs
-                         (bc, NULL:xs'') = span (\x -> x /= NULL) xs'
-                      in printFD4 (bc2string str) >> runBC' bc e s >>= \v -> runBC' xs'' e (v:s)
+  (PRINT:xs)      -> let (n : xs')          = xs 
+                         str                = take n xs'
+                         (NULL : m : xs'')  = xs' 
+                         (bc, xs''')        = splitAt m xs''
+                      in printFD4 (bc2string str) >>
+                        runBC' bc e s             >>= \v ->
+                        runBC' xs''' e (v:s)
   (PRINTN:xs)     -> let (I n : _) = s
                       in printFD4 (show n) >> runBC' xs e s
   (x:xs)          -> failFD4 $ "opcode desconocido: " ++ show x
