@@ -18,9 +18,6 @@ module Bytecompile
 import Lang
 import MonadFD4
 
-import Debug.Trace (trace)
-
-
 import qualified Data.ByteString.Lazy as BS
 import Data.Binary ( Word32, Binary(put, get), decode, encode )
 import Data.Binary.Put ( putWord32le )
@@ -31,7 +28,6 @@ import Data.Char
 import Eval (semOp)
 import Subst
 import PPrint (pp)
-import Data.ByteString (split)
 
 type Opcode = Int
 type Bytecode = [Int]
@@ -78,6 +74,7 @@ pattern FUNCTION = 4
 pattern CALL     = 5
 pattern ADD      = 6
 pattern SUB      = 7
+pattern CJUMP    = 8
 pattern FIX      = 9
 pattern STOP     = 10
 pattern SHIFT    = 11
@@ -129,7 +126,7 @@ bcc t = pp t  >> case t of
   Print _ str t1 -> do
     bt <- bcc t1
     let sbc = string2bc str
-    return $ [PRINT, length sbc] ++ sbc ++ [NULL, length bt] ++ bt ++ [NULL, PRINTN] 
+    return $ [PRINT] ++ sbc ++ [NULL] ++ bt ++ [NULL, PRINTN] 
   BinaryOp _ Add t1 t2 -> do
     b1 <- bcc t1
     b2 <- bcc t2
@@ -145,7 +142,7 @@ bcc t = pp t  >> case t of
     bc <- bcc c
     b1 <- bcc t1
     b2 <- bcc t2
-    return $ bc ++ [JUMP, length b1] ++ b1 ++ [JUMP, length b2] ++ b2
+    return $ bc ++ [CJUMP, length b1 + 1] ++ b1 ++ [JUMP, length b2] ++ b2
     -- [c, JUMP, l1, x1, x2, ..., xn, JUMP, l2, y1, y2, ..., ym]
     --  0, 1,     2, 2 + 1, 2 + 2, 2 + n, 2 + n + 1, 2+n+2,2+n+m]   
     -- - Si c == 1, seguimos ejecutando en la vm, 
@@ -231,16 +228,15 @@ runBC' bs e s = printVals True bs e s >> case bs of
   (FIX:xs)        -> let efix = RA efix xs : e
                       in runBC' xs efix s
   (STOP:xs)       -> return (head s)
+  (CJUMP:i:xs)    -> let (I c : s') = s 
+                      in case c of 
+                          0 -> runBC' xs e s' 
+                          _ -> runBC' (drop i xs) e s' 
   (JUMP:i:xs)     -> runBC' (drop i xs) e s
   (SHIFT:xs)      -> runBC' xs (head s : e) (tail s)
   (DROP:xs)       -> runBC' xs (tail e) s
-  (PRINT:xs)      -> let (n : xs')          = xs 
-                         str                = take n xs'
-                         (NULL : m : xs'')  = xs' 
-                         (bc, xs''')        = splitAt m xs''
-                      in printFD4 (bc2string str) >>
-                        runBC' bc e s             >>= \v ->
-                        runBC' xs''' e (v:s)
+  (PRINT:xs)      -> let (str, bc') = span (/=NULL) xs 
+                      in printFD4 (bc2string str) >> runBC' bc' e s
   (PRINTN:xs)     -> let (I n : _) = s
                       in printFD4 (show n) >> runBC' xs e s
   (x:xs)          -> failFD4 $ "opcode desconocido: " ++ show x
