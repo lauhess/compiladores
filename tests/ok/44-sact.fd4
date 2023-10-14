@@ -1,0 +1,6 @@
+let rec sact (n:Nat) : Nat =
+    ifz n
+    then 0
+    else n + sact (n-1)
+
+let y : Nat = print "sact 3 = " (sact 3)

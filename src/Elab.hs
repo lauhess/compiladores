@@ -182,7 +182,7 @@ elabClose x env term = do
 
 elabClose2 :: MonadFD4 m => Name -> Name -> [Name] -> STerm -> m (Scope2 Pos Var)
 elabClose2 x y env term = do
-  t <- elab' (x:env) term
+  t <- elab' (x:y:env) term
   return $ close2 x y t
 
 makeType ::  MonadFD4 m => [(Name, SType)] -> Ty -> m Ty

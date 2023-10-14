@@ -35,9 +35,18 @@ type Bytecode = [Int]
 newtype Bytecode32 = BC { un32 :: [Word32] }
 
 type Env = [Val]
-data Val = I Int | Fun Env Bytecode | RA Env Bytecode deriving Show
+data Val = I Int | Fun Env Bytecode | RA Env Bytecode 
+instance Show Val where 
+  show (I n) = show n
+  show (Fun _ b) = "Fun [" ++ showBC b ++ "]"
+  show (RA _ b) = "RA [" ++ showBC b ++ "]"
+
+-- ToDo: Modificar  para soportar varios modos de debug: Solo bytecode, solo pila, ambos, ninguno
+-- Usar potencias dos para representar los modos de debug
 printVals :: MonadFD4 m => Bool -> Bytecode -> Env -> [Val] -> m ()
-printVals True x e vs = printFD4 $ "Next: " ++ intercalate "; " (showOps x) ++ "\nEnv: " ++ intercalate ", " (map show e) ++ "\nPila: " ++ intercalate ", " (map show vs) ++ "\n"
+printVals True x e vs = printFD4 $  "Next: " ++ intercalate "; " (showOps x)  ++ 
+                                   "\nEnv: " ++ intercalate ", " (map show e) ++ 
+                                   "\nPila: " ++ intercalate ", " (map show (take 10 vs)) ++ "\n"
 printVals False _ _ _ = return ()
 
 {- Esta instancia explica como codificar y decodificar Bytecode de 32 bits -}
@@ -96,6 +105,7 @@ showOps (ADD:xs)         = "ADD" : showOps xs
 showOps (SUB:xs)         = "SUB" : showOps xs
 showOps (FIX:xs)         = "FIX" : showOps xs
 showOps (STOP:xs)        = "STOP" : showOps xs
+showOps (CJUMP:i:xs)     = ("CJUMP off=" ++ show i) : showOps xs
 showOps (JUMP:i:xs)      = ("JUMP off=" ++ show i) : showOps xs
 showOps (SHIFT:xs)       = "SHIFT" : showOps xs
 showOps (DROP:xs)        = "DROP" : showOps xs
@@ -111,9 +121,9 @@ showBC = intercalate "; " . showOps
 -- Compila un término a bytecode
 bcc :: MonadFD4 m => TTerm -> m Bytecode
 bcc t = pp t  >> case t of
-  V _ (Free _) -> failFD4 "implementame! (Bytecompile:112)"
+  V _ (Free _) -> failFD4 "implementame! (Bytecompile:114)"
   V _ (Bound i) -> return [ACCESS, i]
-  V _ (Global _) -> failFD4 "implementame! (Bytecompile:114)"
+  V _ (Global _) -> failFD4 "implementame! (Bytecompile:116)"
   Const _ (CNat n) -> return [CONST, fromIntegral n]
   Lam _ _ _ (Sc1 t1) -> do
     printFD4 $ show t1
@@ -142,7 +152,7 @@ bcc t = pp t  >> case t of
     bc <- bcc c
     b1 <- bcc t1
     b2 <- bcc t2
-    return $ bc ++ [CJUMP, length b1 + 1] ++ b1 ++ [JUMP, length b2] ++ b2
+    return $ bc ++ [CJUMP, length b1 + 2] ++ b1 ++ [JUMP, length b2] ++ b2
     -- [c, JUMP, l1, x1, x2, ..., xn, JUMP, l2, y1, y2, ..., ym]
     --  0, 1,     2, 2 + 1, 2 + 2, 2 + n, 2 + n + 1, 2+n+2,2+n+m]   
     -- - Si c == 1, seguimos ejecutando en la vm, 
@@ -210,33 +220,34 @@ runBC :: MonadFD4 m => Bytecode -> m ()
 runBC bc = void $ runBC' bc [] []
 
 runBC' :: MonadFD4 m => Bytecode -> Env -> [Val] -> m Val
-runBC' bs e s = printVals True bs e s >> case bs of
+runBC' bs e s = printVals False bs e s >> case bs of
   []              -> return (head s)
   (NULL:xs)       -> runBC' xs e s
   (RETURN:xs)     -> let (val : RA e' bs' : s') = s
                       in runBC' bs' e' (val : s')
   (CONST:i:xs)    -> runBC' xs e (I i:s)
-  (ACCESS:i:xs)   -> runBC' xs e ( e !! i : s)
+  (ACCESS:i:xs)   -> runBC' xs e ( e !! i  : s)
   (FUNCTION:i:xs) -> let bs' = take i xs
                       in runBC' (drop i xs) e (Fun e bs' : s)
   (CALL:xs)       -> let (v: (Fun ef cf) : s') = s
                       in runBC' cf (v:ef) (RA e xs:s')
   (ADD:xs)        -> let (I x : I y : s') = s
-                      in runBC' xs e (I (semOp Add x y):s')
+                      in runBC' xs e (I (semOp Add y x):s')
   (SUB:xs)        -> let (I x : I y : s') = s
-                      in runBC' xs e (I (semOp Sub x y):s')
-  (FIX:xs)        -> let efix = RA efix xs : e
-                      in runBC' xs efix s
+                      in runBC' xs e (I (semOp Sub y x):s')
+  (FIX:xs)        -> let (Fun ef bc : s') = s  
+                         efix      = Fun efix bc : e
+                      in runBC' xs e (Fun efix bc : s')
   (STOP:xs)       -> return (head s)
   (CJUMP:i:xs)    -> let (I c : s') = s 
                       in case c of 
                           0 -> runBC' xs e s' 
-                          _ -> runBC' (drop i xs) e s' 
+                          _ -> runBC' (drop i xs) e s'
   (JUMP:i:xs)     -> runBC' (drop i xs) e s
   (SHIFT:xs)      -> runBC' xs (head s : e) (tail s)
   (DROP:xs)       -> runBC' xs (tail e) s
   (PRINT:xs)      -> let (str, bc') = span (/=NULL) xs 
-                      in printFD4 (bc2string str) >> runBC' bc' e s
+                      in ( liftIO . putStr) (bc2string str) >> runBC' bc' e s
   (PRINTN:xs)     -> let (I n : _) = s
                       in printFD4 (show n) >> runBC' xs e s
   (x:xs)          -> failFD4 $ "opcode desconocido: " ++ show x

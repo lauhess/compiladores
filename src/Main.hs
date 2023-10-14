@@ -38,7 +38,7 @@ import MonadFD4
 import TypeChecker ( tc, tcDecl )
 import CEK
 import GHC.Base (sequence)
-import Bytecompile (bytecompileModule, bcWrite, bcRead, runBC)
+import Bytecompile (bytecompileModule, bcWrite, bcRead, runBC, showBC)
 
 prompt :: String
 prompt = "FD4> "
@@ -142,18 +142,24 @@ byteCompileFile f = do
     prog <- case sdecl of
       Nothing -> failFD4 "Error de compilacion"
       Just decl ->  mapM (\sd -> typecheckDecl sd >>= \d -> addDecl d >> return d) decl
+    --prog <- mapM (\sd -> typecheckDecl sd >>= \d -> addDecl d >> return d) (sequence' mdecls)
     printFD4 $  "Compilando " ++ f ++ " a bytecode "
     bytecode <- bytecompileModule prog
-    let fp = (reverse . dropWhile (/= '.') . reverse) f ++ "bc"
+    let fp = (reverse . dropWhile (/= '.') . reverse) f ++ "bc32"
     printFD4 $ "Escribiendo bytecode a " ++ fp
     liftIO (bcWrite bytecode fp)
-
+    --where 
+    --  sequence' :: [Maybe a] -> [a]
+    --  sequence' [] = []
+    --  sequence' (Nothing:xs) = sequence' xs
+    --  sequence' (Just x:xs) = x : sequence' xs
 byteRunVmFile :: MonadFD4 m => FilePath -> m ()
 byteRunVmFile f = do
-  printFD4 ("Abriendo " ++ f ++ "...")
+  --printFD4 ("Abriendo " ++ f ++ "...")
   bs <- liftIO $ bcRead f
+  printFD4 (showBC bs)
   r <- runBC bs
-  printFD4 (show r)
+  return ()
 
 parseIO ::  MonadFD4 m => String -> P a -> String -> m a
 parseIO filename p x = case runP p x filename of
@@ -175,7 +181,9 @@ handleDecl' d = do
         m <- getMode
         case m of
           Interactive -> do
+              printFD4 $ show d
               (Decl p x t tt) <- typecheckDecl d
+              printFD4 $ show tt
               te <- eval tt
               addDecl (Decl p x t te)
           Typecheck -> do
