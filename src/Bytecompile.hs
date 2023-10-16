@@ -136,7 +136,7 @@ bcc t = pp t  >> case t of
   Print _ str t1 -> do
     bt <- bcc t1
     let sbc = string2bc str
-    return $ [PRINT] ++ sbc ++ [NULL] ++ bt ++ [NULL, PRINTN] 
+    return $ [PRINT] ++ sbc ++ [NULL] ++ bt ++ [PRINTN] 
   BinaryOp _ Add t1 t2 -> do
     b1 <- bcc t1
     b2 <- bcc t2
@@ -220,7 +220,7 @@ runBC :: MonadFD4 m => Bytecode -> m ()
 runBC bc = void $ runBC' bc [] []
 
 runBC' :: MonadFD4 m => Bytecode -> Env -> [Val] -> m Val
-runBC' bs e s = printVals False bs e s >> case bs of
+runBC' bs e s = printVals True bs e s >> case bs of
   []              -> return (head s)
   (NULL:xs)       -> runBC' xs e s
   (RETURN:xs)     -> let (val : RA e' bs' : s') = s

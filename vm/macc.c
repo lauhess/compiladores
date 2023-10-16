@@ -19,7 +19,7 @@
 STATIC_ASSERT(sizeof (int) >= sizeof (uint32_t));
 
 /* Habilitar impresión de traza? */
-#define TRACE 0
+#define TRACE 1
 
 enum {
 	RETURN   = 1,
@@ -195,7 +195,39 @@ void run(code init_c)
 		switch(*c++) {
 		case ACCESS: {
 			/* implementame */
-			abort();
+			// fprintf(stderr, "ACCESS %d, len env = %d\n",access, env_len(e));
+			//	quit("FATAL: No hay suficientes valores en el entorno");
+			/*
+						env env_temp = e;
+			uint32_t i = *c++, access = i;
+
+			if (env_temp == NULL)
+				quit("ERROR: Entorno vacio");
+
+			while (i > 0) {
+				if (env_temp->next == NULL) {
+					fprintf(stderr, "ACCESS %d, len env = %d\n",access, env_len(e));
+					quit("FATAL: No hay suficientes valores en el entorno");
+				}
+
+				env_temp = env_temp->next;
+				i--;
+			}
+
+			(*s++).i = env_temp->v.i;
+			break;
+			*/
+			int access = *c++;
+			while (access > 0) {
+				if (e->next == NULL) {
+					fprintf(stderr, "ACCESS %d, len env = %d\n",access, env_len(e));
+					quit("FATAL: No hay suficientes valores en el entorno");
+				}
+				e = e->next;
+				access--;
+			}
+			(*s++).i = e->v.i;
+			break;
 		}
 
 		case CONST: {
@@ -326,12 +358,17 @@ void run(code init_c)
 
 		case SHIFT: {
 			/* implementame */
-			abort();
+			value v = *--s;
+			e = env_push(e, v);
+			// c++;
+			break;
 		}
 
 		case DROP: {
 			/* implementame */
-			abort();
+			e = e->next;
+			// c++;
+			break;
 		}
 
 		case PRINTN: {
@@ -345,6 +382,29 @@ void run(code init_c)
 			while ((wc = *c++))
 				putwchar(wc);
 
+			break;
+		}
+
+		case JUMP: {
+			/*
+			 * Salto incondicional: leemos la dirección de
+			 * destino y saltamos.
+			 */
+			uint32_t offset = *c;
+			c += offset;
+			break;
+		}
+
+		case CJUMP: {
+			/*
+			 * Salto condicional: leemos la dirección de destino
+			 * y el valor de la condición. Si la condición es
+			 * falsa, saltamos.
+			 */
+			value cond = *--s;
+			uint32_t offset = *c;
+			if (!cond.i)
+				c += offset;
 			break;
 		}
 
