@@ -19,7 +19,7 @@
 STATIC_ASSERT(sizeof (int) >= sizeof (uint32_t));
 
 /* Habilitar impresión de traza? */
-#define TRACE 1
+#define TRACE 0
 
 enum {
 	RETURN   = 1,
@@ -118,6 +118,76 @@ static int env_len(env e)
 	return rc;
 }
 
+void showOp(code cc){
+	fprintf(stderr, "code dir:%p\n",cc);
+	
+	int n = 0;
+	fprintf(stderr, "code -> [");
+	for (; n < 20 && *cc != STOP; n++) {
+		switch (*cc++){
+		case RETURN:{
+			fprintf(stderr, "RETURN; ");
+			break;}
+		case CONST:{
+			unsigned c = *cc++;
+			fprintf(stderr, "CONST %u; ", c);
+			break;}
+		case ACCESS:{
+			unsigned c = *cc++;
+			fprintf(stderr, "ACCESS %u; ", c);
+			break;}
+		case FUNCTION:{
+			unsigned c = *cc++;
+			fprintf(stderr, "FUNCTION len=%u; ", c);
+			break;}
+		case CALL:{
+			fprintf(stderr, "CALL; ");
+			break;}
+		case ADD:{
+			fprintf(stderr, "ADD; ");
+			break;}
+		case SUB:{
+			fprintf(stderr, "SUB; ");
+			break;}
+		case FIX:{
+			fprintf(stderr, "FIX; ");
+			break;}
+		case STOP:{
+			fprintf(stderr, "STOP; ");
+			break;}
+		case CJUMP:{
+			unsigned c = *cc++;
+			fprintf(stderr, "CJUMP off=%d; ",c);
+			break;}
+		case JUMP:{
+			unsigned c = *cc++;
+			fprintf(stderr, "JUMP off=%d; ",c);
+			break;}
+		case SHIFT:{
+			fprintf(stderr, "SHIFT; ");
+			break;}
+		case DROP:{
+			fprintf(stderr, "DROP; ");
+			break;}
+		case PRINT:{
+			fprintf(stderr, "PRINT; ");
+			wchar_t wc;
+			while ((wc = *cc++));
+			fprintf(stderr, "; ");
+			break;}
+		case PRINTN:{
+			fprintf(stderr, "PRINTN; ");
+			break;}
+		default:
+			break;
+		} 
+	}
+	if (n == 20)
+		fprintf(stderr, "...]\n");
+	else
+		fprintf(stderr, "%i]\n", STOP);
+}
+
 void run(code init_c)
 {
 	/*
@@ -174,18 +244,8 @@ void run(code init_c)
 
 		/* Tracing: sólo activado condicionalmente */
 		if (TRACE) {
-			int n = 0;
-			code cc;
 			fprintf(stderr, "code offset = %li\n", c - init_c);
-			fprintf(stderr, "code -> [");
-			for (cc = c; n < 20 && *cc != STOP; n++, cc++) {
-				fprintf(stderr, "%i ", *cc);
-			}
-			if (n == 20)
-				fprintf(stderr, "...]\n");
-			else
-				fprintf(stderr, "%i]\n", STOP);
-
+			showOp(c);
 			fprintf(stderr, "*c = %d\n", *c);
 			fprintf(stderr, "|s| = %ld\n", s - stack);
 			fprintf(stderr, "|e| = %d\n", env_len(e));
@@ -197,8 +257,8 @@ void run(code init_c)
 			/* implementame */
 			// fprintf(stderr, "ACCESS %d, len env = %d\n",access, env_len(e));
 			//	quit("FATAL: No hay suficientes valores en el entorno");
-			/*
-						env env_temp = e;
+			
+			env env_temp = e;
 			uint32_t i = *c++, access = i;
 
 			if (env_temp == NULL)
@@ -214,19 +274,7 @@ void run(code init_c)
 				i--;
 			}
 
-			(*s++).i = env_temp->v.i;
-			break;
-			*/
-			int access = *c++;
-			while (access > 0) {
-				if (e->next == NULL) {
-					fprintf(stderr, "ACCESS %d, len env = %d\n",access, env_len(e));
-					quit("FATAL: No hay suficientes valores en el entorno");
-				}
-				e = e->next;
-				access--;
-			}
-			(*s++).i = e->v.i;
+			(*s++) = env_temp->v;
 			break;
 		}
 
@@ -284,6 +332,7 @@ void run(code init_c)
 			 * entorno con el valor de la aplicación, pero
 			 * tenemos que guardar nuestra dirección de retorno.
 			 */
+			printf("\n\n>call\n\n");
 			value arg = *--s;
 			value fun = *--s;
 
@@ -390,7 +439,7 @@ void run(code init_c)
 			 * Salto incondicional: leemos la dirección de
 			 * destino y saltamos.
 			 */
-			uint32_t offset = *c;
+			uint32_t offset = *c++;
 			c += offset;
 			break;
 		}
@@ -402,8 +451,8 @@ void run(code init_c)
 			 * falsa, saltamos.
 			 */
 			value cond = *--s;
-			uint32_t offset = *c;
-			if (!cond.i)
+			uint32_t offset = *c++;
+			if (cond.i)
 				c += offset;
 			break;
 		}
