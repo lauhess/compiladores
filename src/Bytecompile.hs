@@ -114,6 +114,7 @@ showOps (PRINT:xs)       = let (msg,_:rest) = span (/=NULL) xs
                            in ("PRINT " ++ show (bc2string msg)) : showOps rest
 showOps (PRINTN:xs)      = "PRINTN" : showOps xs
 showOps (ADD:xs)         = "ADD" : showOps xs
+showOps (TAILCALL:xs)    = "TAILCALL" : showOps xs
 showOps (x:xs)           = show x : showOps xs
 
 showBC :: Bytecode -> String
@@ -121,15 +122,14 @@ showBC = intercalate "; " . showOps
 
 -- Compila un término a bytecode
 bcc :: MonadFD4 m => TTerm -> m Bytecode
-bcc t = pp t  >> case t of
+bcc t = case t of
   V _ (Free _) -> failFD4 "implementame! (Bytecompile:114)"
   V _ (Bound i) -> return [ACCESS, i]
   V _ (Global _) -> failFD4 "implementame! (Bytecompile:116)"
   Const _ (CNat n) -> return [CONST, fromIntegral n]
   Lam _ _ _ (Sc1 t1) -> do
-    printFD4 $ show t1
-    bt <- bcc t1
-    return $ [FUNCTION, length bt + 1] ++ bt ++ [RETURN]
+    bt <- bctc t1
+    return $ [FUNCTION, length bt] ++ bt
   App _ t1 t2 -> do
     b1 <- bcc t1
     b2 <- bcc t2
@@ -147,8 +147,8 @@ bcc t = pp t  >> case t of
     b2 <- bcc t2
     return $ b1 ++ b2 ++ [SUB]
   Fix _ _ _ _ _ (Sc2 t1) -> do
-    b1 <- bcc t1
-    return $ [FUNCTION, length b1 + 1] ++ b1 ++ [RETURN, FIX]
+    b1 <- bctc t1
+    return $ [FUNCTION, length b1] ++ b1 ++ [FIX]
   IfZ _ c t1 t2 -> do
     bc <- bcc c
     b1 <- bcc t1
@@ -166,6 +166,26 @@ bcc t = pp t  >> case t of
     b1 <- bcc t1
     b2 <- bcc t2
     return $ b1 ++ [SHIFT] ++ b2 ++ [DROP]
+
+bctc :: MonadFD4 m => TTerm -> m Bytecode
+bctc t = case t of 
+  App _ t1 t2 -> do 
+    b1 <- bcc t1 
+    b2 <- bcc t2 
+    return $ b1 ++ b2 ++ [TAILCALL]
+  IfZ _ c t1 t2 -> do 
+    bc <- bcc c 
+    b1 <- bctc t1 
+    b2 <- bctc t2 
+    return $ bc ++ [CJUMP, length b1 + 2] ++ b1 ++ [JUMP, length b2] ++ b2
+  Let _ _ _ t1 (Sc1 t2) -> do 
+    b1 <- bcc t1 
+    b2 <- bctc t2 
+    return $ b1 ++ [SHIFT] ++ b2
+  _ -> do 
+    bt <- bcc t 
+    return $ bt ++ [RETURN]
+      
 
 -- ord/chr devuelven los codepoints unicode, o en otras palabras
 -- la codificación UTF-32 del caracter.
@@ -251,6 +271,8 @@ runBC' bs e s = printVals True bs e s >> case bs of
                       in ( liftIO . putStr) (bc2string str) >> runBC' bc' e s
   (PRINTN:xs)     -> let (I n : _) = s
                       in printFD4 (show n) >> runBC' xs e s
+  (TAILCALL:xs)   -> let (v : Fun eg cg :  s') = s
+                      in runBC' cg (v : eg) s'
   (x:xs)          -> failFD4 $ "opcode desconocido: " ++ show x
 
 

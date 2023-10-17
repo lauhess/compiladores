@@ -19,7 +19,7 @@
 STATIC_ASSERT(sizeof (int) >= sizeof (uint32_t));
 
 /* Habilitar impresión de traza? */
-#define TRACE 0
+#define TRACE 1
 
 enum {
 	RETURN   = 1,
@@ -177,6 +177,9 @@ void showOp(code cc){
 			break;}
 		case PRINTN:{
 			fprintf(stderr, "PRINTN; ");
+			break;}
+		case TAILCALL: {
+			fprintf(stderr, "TAILCALL; ");
 			break;}
 		default:
 			break;
@@ -350,7 +353,14 @@ void run(code init_c)
 
 		case TAILCALL: {
 			/* implementame */
-			abort();
+			value val = *--s;
+			value fun = *--s;
+
+			e = fun.clo.clo_env;
+			e = env_push(e, val);
+
+			c = fun.clo.clo_body;
+			break;
 		}
 
 		case FUNCTION: {
