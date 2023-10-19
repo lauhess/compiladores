@@ -195,6 +195,16 @@ string2bc = map ord
 bc2string :: Bytecode -> String
 bc2string = map chr
 
+optimizeBytecode :: Bytecode -> Bytecode
+optimizeBytecode [] = []
+optimizeBytecode [DROP] = []
+optimizeBytecode (DROP:xs) = 
+  case optimizeBytecode xs of
+    []             -> []
+    xs'@(RETURN:_) -> xs' 
+    xs'            -> DROP:xs'
+optimizeBytecode (x:xs) = x:optimizeBytecode xs            
+
 bytecompileModule :: MonadFD4 m => Module -> m Bytecode
 -- bytecompileModule m = bytecompileModule' m []
 bytecompileModule [] = return [STOP]
@@ -204,16 +214,9 @@ bytecompileModule m = do
     pt <- pp t
     printFD4 pt
     bc <- bcc t
+    let opt = optimizeBytecode bc
     -- printFD4 $ intercalate "\n" $ showOps bc
-    return (bc ++ [STOP])
--- bytecompileModule' :: MonadFD4 m => Module -> Bytecode -> m Bytecode
--- bytecompileModule' [] bcs = return $ bcs ++ [STOP]
--- -- bytecompileModule' ((Decl _ x ty t):ds) bcs = do
--- --   let (Sc1 t') = close x t
--- --   bcc_t' <- bcc t'
--- --   bytecompileModule' ds (bcc_t' ++ bcs)
--- -- bytecompileModule' ((Decl _ x ty t):ds) bcs = 
-
+    return (opt ++ [STOP])
 
 decl2term :: Module -> TTerm
 decl2term [Decl info x ty t] = liverator t
