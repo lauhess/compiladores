@@ -1,0 +1,8 @@
+let rec ack (a : Nat) (b : Nat) : Nat = 
+    ifz a
+    then b + 1
+    else ifz b
+        then ack (a - 1) 1
+        else ack (a - 1) (ack a (b - 1))
+
+let res : Nat = print "ack 3 15 = " (ack 3 15)

@@ -103,6 +103,8 @@ data Tm info var =
 type Term = Tm Pos Var       -- ^ 'Tm' con índices de De Bruijn como variables ligadas, y nombres para libres y globales, guarda posición
 type TTerm = Tm (Pos,Ty) Var -- ^ 'Tm' con índices de De Bruijn como variables ligadas, y nombres para libres y globales, guarda posición y tipo
 
+type Module = [Decl TTerm] -- Represnta un archivo de FD4
+
 data Var =
     Bound !Int
   | Free Name

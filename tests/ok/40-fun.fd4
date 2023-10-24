@@ -1,0 +1,1 @@
+let f : Nat = (fun (x : Nat) -> print "f x = " (x + 4)) 10
