@@ -37,7 +37,6 @@ import PPrint ( pp , ppTy, ppDecl )
 import MonadFD4
 import TypeChecker ( tc, tcDecl )
 import CEK
-import Debug.Trace
 import GHC.Base (sequence)
 import Bytecompile (bytecompileModule, bcWrite, bcRead, runBC, showBC)
 
@@ -215,12 +214,10 @@ handleDecl' d = do
               addDecl ed
           InteractiveCEK -> do
             (Decl p x t tt) <- typecheckDecl d
-            v <- seek tt [] []
-            printFD4 $ show v
+            v <- seek tt
             let tt' = val2term v 
             let decl' = Decl p x t tt'
             ppterm <- ppDecl decl'
-            trace ppterm $ printFD4 ppterm
             addDecl $ Decl p x t $ val2term v
 
           _ -> undefined
@@ -330,13 +327,9 @@ handleTerm t = do
          case m of 
           InteractiveCEK -> do 
             printFD4 "Evaluando sobre Máquina CEK"
-            printFD4 $ show tt
-            v <- seek tt [] []
-            printFD4 $ show v
+            v <- seek tt
             let te = val2term v 
-            printFD4 $ show te
             ppte <- pp te
-            -- (fun (x:Nat) -> fun (y:Nat) -> x+y) 10
             printFD4 (ppte ++ " : " ++ ppTy (getTy tt))
           _ -> do
             te <- eval tt
