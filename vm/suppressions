@@ -1,0 +1,72 @@
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Cond
+   fun:GC_push_all_eager
+   fun:GC_with_callee_saves_pushed
+   fun:UnknownInlinedFun
+   fun:GC_push_roots.lto_priv.0
+   fun:GC_mark_some.lto_priv.0
+   fun:GC_stopped_mark.lto_priv.0
+   fun:GC_try_to_collect_inner.lto_priv.0
+   fun:UnknownInlinedFun
+   fun:GC_init
+   fun:main
+}
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Cond
+   fun:GC_push_all_eager
+   fun:GC_with_callee_saves_pushed
+   fun:UnknownInlinedFun
+   fun:GC_push_roots.lto_priv.0
+   fun:GC_mark_some.lto_priv.0
+   fun:GC_stopped_mark.lto_priv.0
+   fun:GC_try_to_collect_inner.lto_priv.0
+   fun:UnknownInlinedFun
+   fun:GC_init
+   fun:main
+}
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Cond
+   fun:GC_mark_from
+   fun:GC_mark_some.lto_priv.0
+   fun:GC_stopped_mark.lto_priv.0
+   fun:GC_try_to_collect_inner.lto_priv.0
+   fun:UnknownInlinedFun
+   fun:GC_init
+   fun:main
+}
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Cond
+   fun:GC_mark_from
+   fun:GC_mark_some.lto_priv.0
+   fun:GC_stopped_mark.lto_priv.0
+   fun:GC_try_to_collect_inner.lto_priv.0
+   fun:UnknownInlinedFun
+   fun:GC_init
+   fun:main
+}
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Cond
+   fun:GC_mark_from
+   fun:GC_mark_some.lto_priv.0
+   fun:GC_stopped_mark.lto_priv.0
+   fun:GC_try_to_collect_inner.lto_priv.0
+   fun:UnknownInlinedFun
+   fun:GC_init
+   fun:main
+} 
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Cond
+   fun:GC_mark_from
+   fun:GC_mark_some.lto_priv.0
+   fun:GC_stopped_mark.lto_priv.0
+   fun:GC_try_to_collect_inner.lto_priv.0
+   fun:UnknownInlinedFun
+   fun:GC_init
+   fun:main
+}

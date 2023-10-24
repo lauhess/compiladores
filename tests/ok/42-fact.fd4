@@ -1,0 +1,12 @@
+let rec prod (n:Nat) (m:Nat) : Nat =
+    ifz n
+    then 0
+    else m + prod (n-1) m
+
+let rec fact (n:Nat) : Nat =
+    ifz n
+    then 1
+    else prod n (fact (n-1))
+
+let y : Nat = print "2 * 2 = " (prod 2 2)
+let x : Nat = print "6! = " (fact 6)

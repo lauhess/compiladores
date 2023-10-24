@@ -1,0 +1,5 @@
+*.o
+macc
+memcheck.log
+memcheck.log*
+vgcore.*

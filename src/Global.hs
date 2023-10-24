@@ -18,8 +18,22 @@ data GlEnv = GlEnv {
   lfile :: String,      -- ^ Último archivo cargado.
   cantDecl :: Int,      -- ^ Cantidad de declaraciones desde la última carga
   glb :: [Decl TTerm],  -- ^ Entorno con declaraciones globales
-  typeSynonym :: [(Name, Ty)] -- ^ Entorno de sinonimos de tipos
+  typeSynonym :: [(Name, Ty)], -- ^ Entorno de sinonimos de tipos
+  statistics :: Statistics
 }
+
+data Statistics = StatsBytecode {
+  opsBC :: Int,
+  clausurasBC :: Int,
+  maxPilaSize :: Int
+  } 
+  | StatsCEK {
+    transitions :: Int,
+    clausurasCEK :: Int
+  }
+  | Dummy
+  deriving Show
+
 
 -- ^ Entorno de tipado de declaraciones globales
 tyEnv :: GlEnv ->  [(Name,Ty)]
@@ -33,18 +47,19 @@ data Mode =
   | Typecheck
   | Eval
   | InteractiveCEK
-  -- | Bytecompile
-  -- | RunVM
+  | Bytecompile
+  | RunVM
   -- | CC
   -- | Canon
   -- | Assembler
   -- | Build
   deriving Show
 data Conf = Conf {
+    prof :: Bool,
     opt :: Bool,          --  ^ True, si estan habilitadas las optimizaciones.
     modo :: Mode
 }
 
 -- | Valor del estado inicial
 initialEnv :: GlEnv
-initialEnv = GlEnv False "" 0 [] []
+initialEnv = GlEnv False "" 0 [] [] Dummy
