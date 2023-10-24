@@ -69,10 +69,10 @@ data SDecl a =
   deriving (Show, Functor)
 
 newtype Const = CNat Int
-  deriving Show
+  deriving (Show, Eq)
 
 data BinaryOp = Add | Sub
-  deriving Show
+  deriving (Show, Eq)
 
 -- | tipo de datos de declaraciones, parametrizado por el tipo del cuerpo de la declaración
 data Decl a = Decl
@@ -109,7 +109,7 @@ data Var =
     Bound !Int
   | Free Name
   | Global Name
-  deriving Show
+  deriving (Show, Eq)
 
 -- Scope es un término con una o dos variables que escapan.
 newtype Scope info var = Sc1 (Tm info var)
