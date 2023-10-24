@@ -46,8 +46,8 @@ prompt = "FD4> "
 
 
 -- | Parser de banderas
-parseMode :: Parser (Mode,Bool)
-parseMode = (,) <$>
+parseMode :: Parser (Mode, Bool, Bool)
+parseMode = (,,) <$>
       (flag' Typecheck ( long "typecheck" <> short 't' <> help "Chequear tipos e imprimir el término")
      <|> flag' InteractiveCEK (long "interactiveCEK" <> short 'k' <> help "Ejecutar interactivamente en la CEK")
       <|> flag' Bytecompile (long "bytecompile" <> short 'm' <> help "Compilar a la BVM")
@@ -59,13 +59,14 @@ parseMode = (,) <$>
   -- <|> flag' Assembler ( long "assembler" <> short 'a' <> help "Imprimir Assembler resultante")
   -- <|> flag' Build ( long "build" <> short 'b' <> help "Compilar")
       )
-   <*> pure False
+   -- <*> pure False
    -- reemplazar por la siguiente línea para habilitar opción
-   -- <*> flag False True (long "optimize" <> short 'o' <> help "Optimizar código")
+      <*> flag False True (long "profile" <> short 'p' <> help "Activar profiling")
+      <*> flag False True (long "optimize" <> short 'o' <> help "Optimizar código")
 
 -- | Parser de opciones general, consiste de un modo y una lista de archivos a procesar
-parseArgs :: Parser (Mode,Bool, [FilePath])
-parseArgs = (\(a,b) c -> (a,b,c)) <$> parseMode <*> many (argument str (metavar "FILES..."))
+parseArgs :: Parser (Mode, Bool, Bool, [FilePath])
+parseArgs = (\(a,b, p) c -> (a,p,b,c)) <$> parseMode <*> many (argument str (metavar "FILES..."))
 
 main :: IO ()
 main = execParser opts >>= go
@@ -75,15 +76,15 @@ main = execParser opts >>= go
      <> progDesc "Compilador de FD4"
      <> header "Compilador de FD4 de la materia Compiladores 2022" )
 
-    go :: (Mode,Bool,[FilePath]) -> IO ()
-    go (Interactive,opt,files) =
-              runOrFail (Conf opt Interactive) (runInputT defaultSettings (repl files))
-    go (Bytecompile, opt, files) =
-              runOrFail (Conf opt Bytecompile) $ mapM_ byteCompileFile  files
-    go (RunVM, opt, files) =
-              runOrFail (Conf opt RunVM) $ mapM_ byteRunVmFile files
-    go (m,opt, files) =
-              runOrFail (Conf opt m) $ mapM_ compileFile files
+    go :: (Mode,Bool,Bool,[FilePath]) -> IO ()
+    go (Interactive,opt,prof,files) =
+              runOrFail (Conf prof opt Interactive) (runInputT defaultSettings (repl files))
+    go (Bytecompile, opt,prof, files) =
+              runOrFail (Conf prof opt Bytecompile) $ mapM_ byteCompileFile  files
+    go (RunVM, opt, prof,files) =
+              runOrFail (Conf prof opt RunVM) $ mapM_ byteRunVmFile files
+    go (m,opt, prof, files) =
+              runOrFail (Conf prof opt m) $ mapM_ compileFile files
 
 runOrFail :: Conf -> FD4 a -> IO a
 runOrFail c m = do
@@ -159,7 +160,16 @@ byteRunVmFile f = do
   bs <- liftIO $ bcRead f
   printFD4 (showBC bs)
   r <- runBC bs
-  return ()
+
+  profEnabled <- getProf
+  when profEnabled (do
+    s <- gets statistics
+    let (StatsBytecode op cl mp) = s
+    printFD4 $ "Numero de ops: " ++ show op ++
+              "\nNumero de clausuras: " ++ show cl ++
+              "\nTamano maximo pila: " ++ show mp ++
+              "\n")
+  
 
 parseIO ::  MonadFD4 m => String -> P a -> String -> m a
 parseIO filename p x = case runP p x filename of
@@ -204,7 +214,7 @@ handleDecl' d = do
             (Decl p x t tt) <- typecheckDecl d
             v <- seek tt [] []
             printFD4 $ show v
-          _ -> undefined  
+          _ -> undefined
 
 typecheckDecl :: MonadFD4 m => Decl STerm -> m (Decl TTerm)
 typecheckDecl (Decl p x ty t) = elab t >>= \term ->

@@ -1,5 +1,6 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE LambdaCase #-}
 {-|
 Module      : Bytecompile
 Description : Compila a bytecode. Ejecuta bytecode.
@@ -28,6 +29,7 @@ import Data.Char
 import Eval (semOp)
 import Subst
 import PPrint (pp)
+import Global (Statistics(..), GlEnv (statistics))
 
 type Opcode = Int
 type Bytecode = [Int]
@@ -35,8 +37,8 @@ type Bytecode = [Int]
 newtype Bytecode32 = BC { un32 :: [Word32] }
 
 type Env = [Val]
-data Val = I Int | Fun Env Bytecode | RA Env Bytecode 
-instance Show Val where 
+data Val = I Int | Fun Env Bytecode | RA Env Bytecode
+instance Show Val where
   show (I n) = show n
   show (Fun _ b) = "Fun [" ++ showBC b ++ "]"
   show (RA _ b) = "RA [" ++ showBC b ++ "]"
@@ -44,8 +46,8 @@ instance Show Val where
 -- ToDo: Modificar  para soportar varios modos de debug: Solo bytecode, solo pila, ambos, ninguno
 -- Usar potencias dos para representar los modos de debug
 printVals :: MonadFD4 m => Bool -> Bytecode -> Env -> [Val] -> m ()
-printVals True x e vs = printFD4 $  "Next: " ++ intercalate "; " (showOps x)  ++ 
-                                   "\nEnv: " ++ intercalate ", " (map show e) ++ 
+printVals True x e vs = printFD4 $  "Next: " ++ intercalate "; " (showOps x)  ++
+                                   "\nEnv: " ++ intercalate ", " (map show e) ++
                                    "\nPila: " ++ intercalate ", " (map show (take 10 vs)) ++ "\n"
 printVals False _ _ _ = return ()
 
@@ -137,7 +139,7 @@ bcc t = case t of
   Print _ str t1 -> do
     bt <- bcc t1
     let sbc = string2bc str
-    return $ [PRINT] ++ sbc ++ [NULL] ++ bt ++ [PRINTN] 
+    return $ [PRINT] ++ sbc ++ [NULL] ++ bt ++ [PRINTN]
   BinaryOp _ Add t1 t2 -> do
     b1 <- bcc t1
     b2 <- bcc t2
@@ -168,24 +170,24 @@ bcc t = case t of
     return $ b1 ++ [SHIFT] ++ b2 ++ [DROP]
 
 bctc :: MonadFD4 m => TTerm -> m Bytecode
-bctc t = case t of 
-  App _ t1 t2 -> do 
-    b1 <- bcc t1 
-    b2 <- bcc t2 
+bctc t = case t of
+  App _ t1 t2 -> do
+    b1 <- bcc t1
+    b2 <- bcc t2
     return $ b1 ++ b2 ++ [TAILCALL]
-  IfZ _ c t1 t2 -> do 
-    bc <- bcc c 
-    b1 <- bctc t1 
-    b2 <- bctc t2 
+  IfZ _ c t1 t2 -> do
+    bc <- bcc c
+    b1 <- bctc t1
+    b2 <- bctc t2
     return $ bc ++ [CJUMP, length b1 + 2] ++ b1 ++ [JUMP, length b2] ++ b2
-  Let _ _ _ t1 (Sc1 t2) -> do 
-    b1 <- bcc t1 
-    b2 <- bctc t2 
+  Let _ _ _ t1 (Sc1 t2) -> do
+    b1 <- bcc t1
+    b2 <- bctc t2
     return $ b1 ++ [SHIFT] ++ b2
-  _ -> do 
-    bt <- bcc t 
+  _ -> do
+    bt <- bcc t
     return $ bt ++ [RETURN]
-      
+
 
 -- ord/chr devuelven los codepoints unicode, o en otras palabras
 -- la codificación UTF-32 del caracter.
@@ -198,12 +200,12 @@ bc2string = map chr
 optimizeBytecode :: Bytecode -> Bytecode
 optimizeBytecode [] = []
 optimizeBytecode [DROP] = []
-optimizeBytecode (DROP:xs) = 
+optimizeBytecode (DROP:xs) =
   case optimizeBytecode xs of
     []             -> []
-    xs'@(RETURN:_) -> xs' 
+    xs'@(RETURN:_) -> xs'
     xs'            -> DROP:xs'
-optimizeBytecode (x:xs) = x:optimizeBytecode xs            
+optimizeBytecode (x:xs) = x:optimizeBytecode xs
 
 bytecompileModule :: MonadFD4 m => Module -> m Bytecode
 -- bytecompileModule m = bytecompileModule' m []
@@ -241,10 +243,10 @@ bcRead filename = (map fromIntegral <$> un32) . decode <$> BS.readFile filename
 
 
 runBC :: MonadFD4 m => Bytecode -> m ()
-runBC bc = void $ runBC' bc [] []
+runBC bc = void $ inicializarStats >> runBC' bc [] []
 
 runBC' :: MonadFD4 m => Bytecode -> Env -> [Val] -> m Val
-runBC' bs e s = printVals True bs e s >> case bs of
+runBC' bs e s = printVals True bs e s >> incOpCount >> incOpMaxPilaSize s >> case bs of
   []              -> return (head s)
   (NULL:xs)       -> runBC' xs e s
   (RETURN:xs)     -> let (val : RA e' bs' : s') = s
@@ -252,25 +254,25 @@ runBC' bs e s = printVals True bs e s >> case bs of
   (CONST:i:xs)    -> runBC' xs e (I i:s)
   (ACCESS:i:xs)   -> runBC' xs e ( e !! i  : s)
   (FUNCTION:i:xs) -> let bs' = take i xs
-                      in runBC' (drop i xs) e (Fun e bs' : s)
+                      in incOpClaus >> runBC' (drop i xs) e (Fun e bs' : s)
   (CALL:xs)       -> let (v: (Fun ef cf) : s') = s
-                      in runBC' cf (v:ef) (RA e xs:s')
+                      in incOpClaus >> runBC' cf (v:ef) (RA e xs:s')
   (ADD:xs)        -> let (I x : I y : s') = s
                       in runBC' xs e (I (semOp Add y x):s')
   (SUB:xs)        -> let (I x : I y : s') = s
                       in runBC' xs e (I (semOp Sub y x):s')
-  (FIX:xs)        -> let (Fun ef bc : s') = s  
+  (FIX:xs)        -> let (Fun ef bc : s') = s
                          efix      = Fun efix bc : e
-                      in runBC' xs e (Fun efix bc : s')
+                      in incOpClaus >> runBC' xs e (Fun efix bc : s')
   (STOP:xs)       -> return (head s)
-  (CJUMP:i:xs)    -> let (I c : s') = s 
-                      in case c of 
-                          0 -> runBC' xs e s' 
+  (CJUMP:i:xs)    -> let (I c : s') = s
+                      in case c of
+                          0 -> runBC' xs e s'
                           _ -> runBC' (drop i xs) e s'
   (JUMP:i:xs)     -> runBC' (drop i xs) e s
   (SHIFT:xs)      -> runBC' xs (head s : e) (tail s)
   (DROP:xs)       -> runBC' xs (tail e) s
-  (PRINT:xs)      -> let (str, bc') = span (/=NULL) xs 
+  (PRINT:xs)      -> let (str, bc') = span (/=NULL) xs
                       in ( liftIO . putStr) (bc2string str) >> runBC' bc' e s
   (PRINTN:xs)     -> let (I n : _) = s
                       in printFD4 (show n) >> runBC' xs e s
@@ -291,3 +293,36 @@ liverator t@(Const _ _) = t
 liverator (Print p str t) = Print p str (liverator t)
 liverator (BinaryOp p op t u) = BinaryOp p op (liverator t) (liverator u)
 liverator (Let p v vty m (Sc1 o)) = Let p v vty (liverator m) (Sc1 (liverator o))
+
+inicializarStats :: MonadFD4 m => m ()
+inicializarStats = getProf >>= \case 
+  True -> modify (\s -> s {
+    statistics = StatsBytecode 0 0 0
+  })
+  _ -> modify (\s -> s {
+    statistics = Dummy
+  })
+
+incOpCount :: MonadFD4 m => m ()
+incOpCount = gets statistics >>= \case
+  (StatsBytecode op cl mp) -> modify (\s -> s {
+      statistics = StatsBytecode (op + 1) cl mp
+    })
+  (StatsCEK _ _) -> failFD4 "Tipo de estadistica equivocado"
+  _ -> return ()
+
+incOpClaus :: MonadFD4 m => m ()
+incOpClaus = gets statistics >>= \case
+  (StatsBytecode op cl mp) -> modify (\s -> s {
+      statistics = StatsBytecode op (cl + 1) mp
+    })
+  (StatsCEK _ _) -> failFD4 "Tipo de estadistica equivocado"
+  _ -> return ()
+
+incOpMaxPilaSize :: MonadFD4 m => [Val] -> m ()
+incOpMaxPilaSize stack = gets statistics >>= \case
+  (StatsBytecode op cl mp) -> modify (\s -> s {
+      statistics = StatsBytecode op cl (max mp (length stack))
+    })
+  (StatsCEK _ _) -> failFD4 "Tipo de estadistica equivocado"
+  _ -> return ()

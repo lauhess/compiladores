@@ -29,6 +29,7 @@ module MonadFD4 (
   getInter,
   getMode,
   getOpt,
+  getProf,
   eraseLastFileDecls,
   failPosFD4,
   failFD4,
@@ -68,6 +69,9 @@ y otras operaciones derivadas de ellas, como por ejemplo
    - @gets :: (GlEnv -> a) -> m a@  
 -}
 class (MonadIO m, MonadState GlEnv m, MonadError Error m, MonadReader Conf m) => MonadFD4 m where
+
+getProf :: MonadFD4 m => m Bool
+getProf = asks prof
 
 getOpt :: MonadFD4 m => m Bool
 getOpt = asks opt
