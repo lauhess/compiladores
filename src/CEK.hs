@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 module CEK where
 import Lang
 import MonadFD4 ( MonadFD4, lookupDecl, failFD4 )
@@ -31,7 +32,9 @@ seek term p k = case term of
     (IfZ _ c t u)       -> seek c p $ IfZEval p t u : k
     (App _ t u)         -> seek t p $ AppEval p u : k
     (V _ (Bound n))     -> destroy (p !! n) k
-    (V i (Global name)) -> lookupDecl name >>= (\(Just t) ->seek t p k)
+    (V i (Global name)) -> lookupDecl name >>= \case
+        (Just t) -> seek t p k 
+        Nothing  -> failFD4 $ "Variable global " ++ name ++ " no encontrada." 
     (V _ _)             -> failFD4 "seek no esperaba variables libres"
     (Const _ (CNat n))  -> destroy (Vall n) k
     (Lam _ n ty (Sc1 t)) -> destroy (ClosFun p n ty t) k
@@ -47,10 +50,10 @@ destroy (Vall n) ((IfZEval p _ t2):ks) = seek t2 p ks
 destroy v ((AppEval p t):ks) = seek t p (Clos v:ks)
 destroy v ((Clos val):ks) = case val of
     (ClosFun p _ _ t)     -> trace "PASÉ" $ seek t (v:p) ks
-    (ClosFix p _ _ _ _ t) -> seek t (val:v:p) ks
+    (ClosFix p _ _ _ _ t) -> seek t (v:val:p) ks
     _                     -> failFD4 "Destroy esperaba clausura y recibio Vall"
 destroy v [] = return v
-destroy v ks = failFD4 $ "Destroy: valor no contemplado \n\t" ++ show v ++ "\n\t" ++ show ks
+destroy v ks = failFD4 $ "Destroy: valor no contemplado \n\t" ++ show v ++ "\n\t" ++ show (head ks)
 
 -- ToDo: Agregar informa con de nombre
 val2term :: Val -> TTerm
@@ -60,7 +63,7 @@ val2term (ClosFun vs n ty t) = let
     vs' = zip vs (reverse [1 .. (length vs)])
     c = foldl (\ term (caso, i) -> subst' i (val2term caso) (Sc1 term)) t vs'
     r = Lam (NoPos, FunTy ty (getTy t)) n ty $ Sc1 c
-    in trace (show r) r    
+    in trace (show r) r
 val2term (ClosFix vs n1 ty1 n2 ty2 t) = let
     vs' = zip vs (reverse [1 .. (length vs)])
     c = foldl (\ term (caso, i) -> trace ("\t-Reemplazando " ++ show caso ++ " en " ++ show term ++ "\n") subst' i (val2term caso) (Sc1 term)) t vs'
@@ -71,14 +74,14 @@ val2term (ClosFix vs n1 ty1 n2 ty2 t) = let
 
 -- Esta es una función auxiliar que usan el resto de las funciones de este módulo
 -- para modificar las vsriables (ligadas y libres) de un término
-varChanger' :: Int 
+varChanger' :: Int
            -> (Int -> info -> Name -> Tm info Var) --que hacemos con las variables localmente libres
            -> (Int -> info -> Int ->  Tm info Var) --que hacemos con los indices de De Bruijn
            -> Tm info Var -> Tm info Var
 varChanger' n' local bound t' = go n' t' where
   go n   (V p (Bound i)) = bound n p i
-  go n   (V p (Free x)) = local n p x 
-  go n   (V p (Global x)) = V p (Global x) 
+  go n   (V p (Free x)) = local n p x
+  go n   (V p (Global x)) = V p (Global x)
   go n (Lam p y ty (Sc1 t))   = Lam p y ty (Sc1 (go (n+1) t))
   go n (App p l r)   = App p (go n l) (go n r)
   go n (Fix p f fty x xty (Sc2 t)) = Fix p f fty x xty (Sc2 (go (n+2) t))
@@ -90,6 +93,6 @@ varChanger' n' local bound t' = go n' t' where
 
 subst' :: Int -> Tm info Var -> Scope info Var -> Tm info Var
 subst' k n (Sc1 m) = varChanger' k (\_ p n' -> V p (Free n')) bnd m
-   where bnd depth p i 
+   where bnd depth p i
              | i == depth = n
              | otherwise  = V p (Bound i)
