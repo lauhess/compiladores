@@ -2,6 +2,7 @@ module Optimization where
 import Lang
 import Eval (semOp)
 import Subst
+import Debug.Trace
 
 iterations :: Int
 iterations = 100
@@ -11,7 +12,7 @@ optimizeTerm = go False 0
     where
         os = [constantFolding, deadCodeElimination, constantPropagation]
         go c i t
-            | c || i >= iterations = t
+            | c || i >= iterations = trace ("Stopping optimization at iter " ++ show i) t
             | otherwise = let t' = foldr (\f tm -> f tm) t os
                         in go (compTTerm t t') (i+1) t'
 

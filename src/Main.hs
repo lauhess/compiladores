@@ -39,6 +39,7 @@ import TypeChecker ( tc, tcDecl )
 import CEK
 import GHC.Base (sequence)
 import Bytecompile (bytecompileModule, bcWrite, bcRead, runBC, showBC)
+import Optimization (optimizeTerm)
 
 prompt :: String
 prompt = "FD4> "
@@ -224,7 +225,11 @@ handleDecl' d = do
 
 typecheckDecl :: MonadFD4 m => Decl STerm -> m (Decl TTerm)
 typecheckDecl (Decl p x ty t) = elab t >>= \term ->
-  tcDecl (Decl p x ty term)
+  tcDecl (Decl p x ty term) >>= \decl ->
+  getOpt >>= \case 
+    True  -> let (Decl _ _ _ tt) = decl 
+             in return (Decl p x ty (optimizeTerm tt))
+    False -> return decl
 
 
 data Command = Compile CompileForm
