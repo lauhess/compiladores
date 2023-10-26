@@ -172,7 +172,7 @@ byteRunVmFile f = do
               "\nNumero de clausuras: " ++ show cl ++
               "\nTamano maximo pila: " ++ show mp ++
               "\n")
-  
+
 
 parseIO ::  MonadFD4 m => String -> P a -> String -> m a
 parseIO filename p x = case runP p x filename of
@@ -216,20 +216,29 @@ handleDecl' d = do
           InteractiveCEK -> do
             (Decl p x t tt) <- typecheckDecl d
             v <- seek tt
-            let tt' = val2term v 
+            let tt' = val2term v
             let decl' = Decl p x t tt'
             ppterm <- ppDecl decl'
             addDecl $ Decl p x t $ val2term v
-
+            profEnabled <- getProf
+            when profEnabled (do
+              s <- gets statistics
+              let (StatsCEK pasos c) = s
+              printFD4 $ "Numero de pasos: " ++ show pasos ++
+                        "\nNumero de clausuras: " ++ show c ++
+                        "\n")
           _ -> undefined
 
 typecheckDecl :: MonadFD4 m => Decl STerm -> m (Decl TTerm)
-typecheckDecl (Decl p x ty t) = elab t >>= \term ->
-  tcDecl (Decl p x ty term) >>= \decl ->
-  getOpt >>= \case 
-    True  -> let (Decl _ _ _ tt) = decl 
-             in return (Decl p x ty (optimizeTerm tt))
-    False -> return decl
+typecheckDecl (Decl p x ty t) = do
+  term <- elab t
+  decl@(Decl _ _ _ tt) <- tcDecl (Decl p x ty term)
+  opt <- getOpt
+  if opt then 
+    optimizeTerm tt >>= \tt' -> 
+    return (Decl p x ty tt')
+  else 
+    return decl
 
 
 data Command = Compile CompileForm
@@ -329,11 +338,11 @@ handleTerm t = do
          t' <- elab t
          s <- get
          tt <- tc t' (tyEnv s)
-         case m of 
-          InteractiveCEK -> do 
+         case m of
+          InteractiveCEK -> do
             printFD4 "Evaluando sobre Máquina CEK"
             v <- seek tt
-            let te = val2term v 
+            let te = val2term v
             ppte <- pp te
             printFD4 (ppte ++ " : " ++ ppTy (getTy tt))
           _ -> do

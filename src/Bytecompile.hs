@@ -30,6 +30,7 @@ import Eval (semOp)
 import Subst
 import PPrint (pp)
 import Global (Statistics(..), GlEnv (statistics))
+import Optimization (optimizeTerm)
 
 type Opcode = Int
 type Bytecode = [Int]
@@ -212,13 +213,15 @@ bytecompileModule :: MonadFD4 m => Module -> m Bytecode
 bytecompileModule [] = return [STOP]
 -- bytecompileModule m = bcc (decl2term m) >>= (\bc -> return (bc ++ [STOP]))
 bytecompileModule m = do
-    let t = decl2term m
+    let t' = decl2term m
+    opt <- getOpt
+    t <- if opt then optimizeTerm t' else return t'
     pt <- pp t
     printFD4 pt
     bc <- bcc t
-    let opt = optimizeBytecode bc
+    let optBC = optimizeBytecode bc
     -- printFD4 $ intercalate "\n" $ showOps bc
-    return (opt ++ [STOP])
+    return (optBC ++ [STOP])
 
 decl2term :: Module -> TTerm
 decl2term [Decl info x ty t] = liverator t
@@ -246,7 +249,7 @@ runBC :: MonadFD4 m => Bytecode -> m ()
 runBC bc = void $ inicializarStats >> runBC' bc [] []
 
 runBC' :: MonadFD4 m => Bytecode -> Env -> [Val] -> m Val
-runBC' bs e s = printVals True bs e s >> incOpCount >> incOpMaxPilaSize s >> case bs of
+runBC' bs e s = printVals False bs e s >> incOpCount >> incOpMaxPilaSize s >> case bs of
   []              -> return (head s)
   (NULL:xs)       -> runBC' xs e s
   (RETURN:xs)     -> let (val : RA e' bs' : s') = s
@@ -295,7 +298,7 @@ liverator (BinaryOp p op t u) = BinaryOp p op (liverator t) (liverator u)
 liverator (Let p v vty m (Sc1 o)) = Let p v vty (liverator m) (Sc1 (liverator o))
 
 inicializarStats :: MonadFD4 m => m ()
-inicializarStats = getProf >>= \case 
+inicializarStats = getProf >>= \case
   True -> modify (\s -> s {
     statistics = StatsBytecode 0 0 0
   })

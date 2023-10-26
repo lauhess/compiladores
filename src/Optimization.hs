@@ -1,93 +1,104 @@
+{-# LANGUAGE LambdaCase #-}
 module Optimization where
 import Lang
 import Eval (semOp)
 import Subst
 import Debug.Trace
+import MonadFD4 (MonadFD4, lookupDecl, printFD4)
+import Data.Foldable (foldrM)
 
 iterations :: Int
 iterations = 100
 
-optimizeTerm :: TTerm -> TTerm
-optimizeTerm = go False 0
-    where
-        os = [constantFolding, deadCodeElimination, constantPropagation]
-        go c i t
-            | c || i >= iterations = trace ("Stopping optimization at iter " ++ show i) t
-            | otherwise = let t' = foldr (\f tm -> f tm) t os
-                        in go (compTTerm t t') (i+1) t'
+os :: MonadFD4 m => [TTerm -> m TTerm]
+os = [constantFolding, deadCodeElimination, constantPropagation]
 
-constantPropagation :: TTerm -> TTerm
+optimizeTerm :: MonadFD4 m => TTerm -> m TTerm
+optimizeTerm t = go t 0 >>= \t' -> printFD4 (show t') >> return t'
+    where
+        go :: MonadFD4 m => TTerm -> Int -> m TTerm
+        go tm i = do 
+          ft <- foldrM (\f tm' -> f tm') tm os
+          if compTTerm t ft || i >= iterations
+            then return ft 
+            else go ft (i+1)
+        
+
+constantPropagation :: MonadFD4 m => TTerm -> m TTerm
 constantPropagation t = case t of
-  V i var -> t
-  Const i co -> t
-  Lam i s ty (Sc1 t1) -> let t1' = constantPropagation t1
-                          in Lam i s ty (Sc1 t1')
-  App i t1 t2 -> let t1' = constantPropagation t1
-                     t2' = constantPropagation t2
-                   in App i t1' t2'
-  Print i s t1 -> let t1' = constantPropagation t1
-                   in Print i s t1'
-  BinaryOp i bo t1 t2 -> let t1' = constantPropagation t1
-                             t2' = constantPropagation t2
-                          in BinaryOp i bo t1' t2'
-  Fix i s ty str ty' (Sc2 t1) -> let t1' = constantPropagation t1
-                                  in Fix i s ty str ty' (Sc2 t1')
-  IfZ i c t1 t2 -> let c' = constantPropagation c
-                       t1' = constantPropagation t1
-                       t2' = constantPropagation t2
-                    in IfZ i c' t1' t2'
-  Let i s ty t1 s1@(Sc1 t2) -> case t1 of
+  V i var -> return t
+  Const i co -> return t
+  Lam i s ty (Sc1 t1) -> constantPropagation t1 >>= \t1' -> 
+                         return $ Lam i s ty (Sc1 t1')
+  App i t1 t2 -> constantPropagation t1 >>= \t1' ->
+                 constantPropagation t2 >>= \t2' -> 
+                 return $ App i t1' t2'
+  Print i s t1 -> constantPropagation t1 >>= \t1' ->
+                  return $ Print i s t1'
+  BinaryOp i bo t1 t2 -> constantPropagation t1 >>= \t1' ->
+                         constantPropagation t2 >>= \t2' ->
+                         return $ BinaryOp i bo t1' t2'
+  Fix i s ty str ty' (Sc2 t1) -> constantPropagation t1 >>= \t1' ->
+                                 return $ Fix i s ty str ty' (Sc2 t1')
+  IfZ i c t1 t2 -> constantPropagation c >>= \c' ->
+                   constantPropagation t1 >>= \t1' ->
+                   constantPropagation t2 >>= \t2' ->
+                   return $ IfZ i c' t1' t2'
+  Let i s ty t1 s1@(Sc1 t2) -> return $ case t1 of
     (Const _ (CNat n)) -> subst t1 s1
     _                  -> t
 
-deadCodeElimination :: TTerm -> TTerm
+deadCodeElimination :: MonadFD4 m => TTerm -> m TTerm
 deadCodeElimination t = case t of
-  V i var -> t
-  Const i co -> t
-  Lam i s ty (Sc1 t1) -> let t1' = deadCodeElimination t1
-                          in Lam i s ty (Sc1 t1')
-  App i t1 t2 -> let t1' = deadCodeElimination t1
-                     t2' = deadCodeElimination t2
-                   in App i t1' t2'
-  Print i s t1 -> let t1' = deadCodeElimination t1
-                   in Print i s t1'
-  BinaryOp i bo t1 t2 -> let t1' = deadCodeElimination t1
-                             t2' = deadCodeElimination t2
-                          in BinaryOp i bo t1' t2'
-  Fix i s ty str ty' (Sc2 t1) -> let t1' = deadCodeElimination t1
-                                  in Fix i s ty str ty' (Sc2 t1')
-  IfZ i c t1 t2 -> case c of
+  V i (Global var) -> lookupDecl var >>= \case
+    Just n@(Const _ (CNat _)) ->  return n
+    _ -> return t
+  V i var -> return t
+  Const i co -> return t
+  Lam i s ty (Sc1 t1) -> deadCodeElimination t1 >>= \t1' ->
+                         return $ Lam i s ty (Sc1 t1')
+  App i t1 t2 -> deadCodeElimination t1 >>= \t1' ->
+                 deadCodeElimination t2 >>= \t2' ->
+                 return $ App i t1' t2'
+  Print i s t1 -> deadCodeElimination t1 >>= \t1' ->
+                  return $ Print i s t1'
+  BinaryOp i bo t1 t2 -> deadCodeElimination t1 >>= \t1' ->
+                         deadCodeElimination t2 >>= \t2' ->
+                         return $ BinaryOp i bo t1' t2'
+  Fix i s ty str ty' (Sc2 t1) -> deadCodeElimination t1 >>= \t1' ->
+                                 return $ Fix i s ty str ty' (Sc2 t1')
+  IfZ i c t1 t2 -> return $ case c of
     (Const _ (CNat n)) -> if n == 0 then t2 else t1
     _                  -> t
-  Let i s ty t1 (Sc1 t2) -> let t1' = deadCodeElimination t1
-                                t2' = deadCodeElimination t2
-                             in Let i s ty t1' (Sc1 t2')
+  Let i s ty t1 (Sc1 t2) -> deadCodeElimination t1 >>= \t1' ->
+                            deadCodeElimination t2 >>= \t2' ->
+                            return $ Let i s ty t1' (Sc1 t2')
 
 
-constantFolding :: TTerm -> TTerm
+constantFolding :: MonadFD4 m => TTerm -> m TTerm
 constantFolding t = case t of
-  V i var -> t
-  Const i co -> t
-  Lam i s ty (Sc1 t1) -> let t1' = constantFolding t1
-                          in Lam i s ty (Sc1 t1')
-  App i t1 t2 -> let t1' = constantFolding t1
-                     t2' = constantFolding t2
-                   in App i t1' t2'
-  Print i s t1 -> let t1' = constantFolding t1
-                   in Print i s t1'
-  BinaryOp i bo (Const _ (CNat n)) (Const _ (CNat m)) -> Const i (CNat (semOp bo n m))
-  BinaryOp i bo t1 t2 -> let t1' = constantFolding t1
-                             t2' = constantFolding t2
-                          in BinaryOp i bo t1' t2'
-  Fix i s ty str ty' (Sc2 t1) -> let t1' = constantFolding t1
-                                  in Fix i s ty str ty' (Sc2 t1')
-  IfZ i c t1 t2 -> let t1' = constantFolding c
-                       t2' = constantFolding t1
-                       t3' = constantFolding t2
-                    in IfZ i t1' t2' t3'
-  Let i s ty t1 (Sc1 t2) -> let t1' = constantFolding t1
-                                t2' = constantFolding t2
-                             in Let i s ty t1' (Sc1 t2')
+  V i var -> return t
+  Const i co -> return t
+  Lam i s ty (Sc1 t1) -> constantFolding t1 >>= \t1' ->
+                         return $ Lam i s ty (Sc1 t1')
+  App i t1 t2 -> constantFolding t1 >>= \t1' ->
+                 constantFolding t2 >>= \t2' ->
+                 return $ App i t1' t2'
+  Print i s t1 -> constantFolding t1 >>= \t1' ->
+                  return $ Print i s t1'
+  BinaryOp i bo (Const _ (CNat n)) (Const _ (CNat m)) -> return $ Const i (CNat (semOp bo n m))
+  BinaryOp i bo t1 t2 -> constantFolding t1 >>= \t1' ->
+                         constantFolding t2 >>= \t2' ->
+                         return $ BinaryOp i bo t1' t2'
+  Fix i s ty str ty' (Sc2 t1) -> constantFolding t1 >>= \t1' ->
+                                 return $ Fix i s ty str ty' (Sc2 t1')
+  IfZ i c t1 t2 -> constantFolding c >>= \c' ->
+                   constantFolding t1 >>= \t1' ->
+                   constantFolding t2 >>= \t2' ->
+                   return $ IfZ i c' t1' t2'
+  Let i s ty t1 (Sc1 t2) -> constantFolding t1 >>= \t1' ->
+                            constantFolding t2 >>= \t2' ->
+                            return $ Let i s ty t1' (Sc1 t2')
 
 -- Compare terms and returns True if they are equal
 -- Ignore info and positions and names
