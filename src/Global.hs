@@ -47,6 +47,7 @@ data Mode =
   | Typecheck
   | Eval
   | InteractiveCEK
+  | EvalCEK
   | Bytecompile
   | RunVM
   -- | CC

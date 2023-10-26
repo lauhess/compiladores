@@ -3,7 +3,6 @@ module Optimization where
 import Lang
 import Eval (semOp)
 import Subst
-import Debug.Trace
 import MonadFD4 (MonadFD4, lookupDecl, printFD4)
 import Data.Foldable (foldrM)
 

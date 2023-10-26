@@ -47,10 +47,9 @@ prompt = "FD4> "
 
 
 -- | Parser de banderas
-parseMode :: Parser (Mode, Bool, Bool)
-parseMode = (,,) <$>
+parseMode :: Parser (Mode, Bool, Bool, Bool)
+parseMode = (,,,) <$>
       (flag' Typecheck ( long "typecheck" <> short 't' <> help "Chequear tipos e imprimir el término")
-     <|> flag' InteractiveCEK (long "interactiveCEK" <> short 'k' <> help "Ejecutar interactivamente en la CEK")
       <|> flag' Bytecompile (long "bytecompile" <> short 'm' <> help "Compilar a la BVM")
       <|> flag' RunVM (long "runVM" <> short 'r' <> help "Ejecutar bytecode en la BVM")
       <|> flag Interactive Interactive ( long "interactive" <> short 'i' <> help "Ejecutar en forma interactiva")
@@ -62,12 +61,13 @@ parseMode = (,,) <$>
       )
    -- <*> pure False
    -- reemplazar por la siguiente línea para habilitar opción
+      <*> flag False True (long "cek" <> short 'k' <> help "Optimizar código")
       <*> flag False True (long "profile" <> short 'p' <> help "Activar profiling")
       <*> flag False True (long "optimize" <> short 'o' <> help "Optimizar código")
 
 -- | Parser de opciones general, consiste de un modo y una lista de archivos a procesar
-parseArgs :: Parser (Mode, Bool, Bool, [FilePath])
-parseArgs = (\(a,b, p) c -> (a,p,b,c)) <$> parseMode <*> many (argument str (metavar "FILES..."))
+parseArgs :: Parser (Mode, Bool, Bool, Bool, [FilePath])
+parseArgs = (\(a,b, p, cek) c -> (a,p,b,cek,c)) <$> parseMode <*> many (argument str (metavar "FILES..."))
 
 main :: IO ()
 main = execParser opts >>= go
@@ -77,17 +77,22 @@ main = execParser opts >>= go
      <> progDesc "Compilador de FD4"
      <> header "Compilador de FD4 de la materia Compiladores 2022" )
 
-    go :: (Mode,Bool,Bool,[FilePath]) -> IO ()
-    go (Interactive,opt,prof,files) =
-              runOrFail (Conf prof opt Interactive) (runInputT defaultSettings (repl files))
-    go (InteractiveCEK,opt, prof, files) =
-              runOrFail (Conf prof opt InteractiveCEK) ((runInputT defaultSettings (repl files)) >>  mapM_ compileFile files)
-    go (Bytecompile, opt,prof, files) =
+    --     Modo, optimizar, profiling, cek, archivos
+    go :: (Mode,Bool,Bool,Bool,[FilePath]) -> IO ()
+    go (Interactive, opt, prof, True,files) =
+              runOrFail (Conf prof opt InteractiveCEK) (runInputT defaultSettings (repl files) >> mapM_ compileFile files)
+    go (Interactive,opt, prof, False,files) =
+              runOrFail (Conf prof opt Interactive) (runInputT defaultSettings (repl files) >> mapM_ compileFile files)
+    -- go (Eval ,opt, prof, True,files) =
+    --           runOrFail (Conf prof opt EvalCEK) (runInputT defaultSettings (repl files) >>  mapM_ compileFile files)
+    -- go (Eval ,opt, prof, False, files) =
+    --           runOrFail (Conf prof opt Eval) (runInputT defaultSettings (repl files) >>  mapM_ compileFile files)
+    go (Bytecompile, opt,prof, cek,files) =
               runOrFail (Conf prof opt Bytecompile) $ mapM_ byteCompileFile  files
-    go (RunVM, opt, prof,files) =
+    go (RunVM, opt, prof,cek,files) =
               runOrFail (Conf prof opt RunVM) $ mapM_ byteRunVmFile files
-    go (m,opt, prof, files) =
-              runOrFail (Conf prof opt m) $ mapM_ compileFile files
+    go (m,opt, prof, cek,files) =
+              runOrFail (Conf prof opt (if cek then EvalCEK else m) ) $ mapM_ compileFile files
 
 runOrFail :: Conf -> FD4 a -> IO a
 runOrFail c m = do
@@ -220,6 +225,13 @@ handleDecl' d = do
             let decl' = Decl p x t tt'
             ppterm <- ppDecl decl'
             addDecl $ Decl p x t $ val2term v
+          EvalCEK -> do
+            (Decl p x t tt) <- typecheckDecl d
+            v <- seek tt
+            let tt' = val2term v
+            let decl' = Decl p x t tt'
+            ppterm <- ppDecl decl'
+            addDecl $ Decl p x t $ val2term v
             profEnabled <- getProf
             when profEnabled (do
               s <- gets statistics
@@ -234,10 +246,10 @@ typecheckDecl (Decl p x ty t) = do
   term <- elab t
   decl@(Decl _ _ _ tt) <- tcDecl (Decl p x ty term)
   opt <- getOpt
-  if opt then 
-    optimizeTerm tt >>= \tt' -> 
+  if opt then
+    optimizeTerm tt >>= \tt' ->
     return (Decl p x ty tt')
-  else 
+  else
     return decl
 
 
