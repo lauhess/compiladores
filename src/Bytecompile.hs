@@ -216,8 +216,8 @@ bytecompileModule m = do
     let t' = decl2term m
     opt <- getOpt
     t <- if opt then optimizeTerm t' else return t'
-    -- pt <- pp t
-    -- printFD4 pt
+    pt <- pp t
+    printFD4 pt
     bc <- bcc t
     let optBC = optimizeBytecode bc
     -- printFD4 $ intercalate "\n" $ showOps bc

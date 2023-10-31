@@ -1,0 +1,9 @@
+let f (x:Nat) : Nat = x + 1 
+
+let g (x:Nat) : Nat = x
+
+let y : Nat = 1 + g 1
+
+let e : Nat = let a : Nat = 1 in let b : Nat = 2 in g a
+
+let a : Nat = print "e = " e

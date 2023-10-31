@@ -5,4 +5,4 @@ let rec ack (a : Nat) (b : Nat) : Nat =
         then ack (a - 1) 1
         else ack (a - 1) (ack a (b - 1))
 
-let res : Nat = print "ack 3 15 = " (ack 3 15)
+let res : Nat = print "ack 3 5 = " (ack 3 5)

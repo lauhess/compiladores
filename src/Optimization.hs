@@ -5,21 +5,28 @@ import Eval (semOp)
 import Subst
 import MonadFD4 (MonadFD4, lookupDecl, printFD4)
 import Data.Foldable (foldrM)
+import Debug.Trace
+import PPrint
 
 iterations :: Int
-iterations = 100
+iterations = 4
 
 os :: MonadFD4 m => [TTerm -> m TTerm]
 os = [constantFolding, deadCodeElimination, constantPropagation]
 
 optimizeTerm :: MonadFD4 m => TTerm -> m TTerm
-optimizeTerm t = go t 0 >>= \t' -> printFD4 (show t') >> return t'
+optimizeTerm t = go t 0 >>= \t' -> 
+  -- printFD4 (show t') >> 
+  return t'
     where
         go :: MonadFD4 m => TTerm -> Int -> m TTerm
         go tm i = do 
           ft <- foldrM (\f tm' -> f tm') tm os
+          t''' <- pp ft
+          printFD4 t'''
           if compTTerm t ft || i >= iterations
-            then return ft 
+            then printFD4 ("\tSe hicieron " ++ show i ++ " iteraciones de optimizacion") >> 
+                 return ft 
             else go ft (i+1)
         
 
@@ -69,9 +76,12 @@ deadCodeElimination t = case t of
   IfZ i c t1 t2 -> return $ case c of
     (Const _ (CNat n)) -> if n == 0 then t2 else t1
     _                  -> t
-  Let i s ty t1 (Sc1 t2) -> deadCodeElimination t1 >>= \t1' ->
-                            deadCodeElimination t2 >>= \t2' ->
-                            return $ Let i s ty t1' (Sc1 t2')
+  Let i s ty t1 (Sc1 t2) -> if True -- boundUse t2 || isImpure t1
+                            then deadCodeElimination t1 >>= \t1' ->
+                                 deadCodeElimination t2 >>= \t2' ->
+                                 return $ Let i s ty t1' (Sc1 t2')
+                            else return $ reBound t2
+                            where reBound = varChanger (\_ p n -> V p (Free n)) (\d p ix -> if ix > d then V p (Bound (ix - 1)) else V p (Bound ix))
 
 
 constantFolding :: MonadFD4 m => TTerm -> m TTerm
@@ -99,6 +109,30 @@ constantFolding t = case t of
                             constantFolding t2 >>= \t2' ->
                             return $ Let i s ty t1' (Sc1 t2')
 
+inlineExpansion ::MonadFD4 m => TTerm -> m TTerm
+inlineExpansion t = case t of
+  V i var -> return t
+  Const i co -> return t
+  Lam i s ty (Sc1 t1) -> inlineExpansion t1 >>= \t1' ->
+                         return $ Lam i s ty (Sc1 t1')
+  App i t1 t2 -> inlineExpansion t1 >>= \t1' ->
+                 inlineExpansion t2 >>= \t2' ->
+                 return $ App i t1' t2'
+  Print i s t1 -> inlineExpansion t1 >>= \t1' ->
+                  return $ Print i s t1'
+  BinaryOp i bo t1 t2 -> inlineExpansion t1 >>= \t1' ->
+                         inlineExpansion t2 >>= \t2' ->
+                         return $ BinaryOp i bo t1' t2'
+  Fix i s ty str ty' (Sc2 t1) -> inlineExpansion t1 >>= \t1' ->
+                                 return $ Fix i s ty str ty' (Sc2 t1')
+  IfZ i c t1 t2 -> inlineExpansion c >>= \c' ->
+                   inlineExpansion t1 >>= \t1' ->
+                   inlineExpansion t2 >>= \t2' ->
+                   return $ IfZ i c' t1' t2'
+  Let i s ty t1 (Sc1 t2) -> inlineExpansion t1 >>= \t1' ->
+                            inlineExpansion t2 >>= \t2' ->
+                            return $ Let i s ty t1' (Sc1 t2')
+
 -- Compare terms and returns True if they are equal
 -- Ignore info and positions and names
 compTTerm :: TTerm -> TTerm -> Bool
@@ -121,3 +155,17 @@ compTTerm (Let _ _ ty1 t11 (Sc1 t12)) (Let _ _ ty2 t21 (Sc1 t22)) =
 compTTerm _ _ = False
 
 
+isPure :: TTerm -> Bool
+isPure (V p (Global _)) = False
+isPure (V p _) = True
+isPure (Lam p y ty (Sc1 t))   = isPure t
+isPure (App p l r)   = isPure l && isPure r
+isPure (Fix p f fty x xty (Sc2 t)) = isPure t
+isPure (IfZ p c t e) = isPure c && isPure t && isPure e
+isPure t@(Const _ _) = True
+isPure (Print p str t) = False
+isPure (BinaryOp p op t u) = isPure t && isPure u
+isPure (Let p v vty m (Sc1 o)) = isPure o
+
+isImpure :: TTerm -> Bool
+isImpure t = not (isPure t)

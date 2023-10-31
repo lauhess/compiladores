@@ -1,0 +1,28 @@
+let rec sum0_n (n : Nat) : Nat =
+    ifz n
+    then 0
+    else n + (sum (n-1))
+
+let rec prod (n:Nat) (m:Nat) : Nat =
+    ifz n
+    then 0
+    else m + prod (n-1) m
+
+let rec pot (n : Nat) (p : Nat) : Nat =
+    ifz p
+    then 1
+    else prod n (pot n (p-1))
+
+let menor (n : Nat) (m : Nat) : Nat =
+    (n - m)
+
+let mayor (n : Nat) (m : Nat) : Nat =
+    (m - n)
+
+# let null 
+
+# let cons 
+
+# let head
+
+# let tail

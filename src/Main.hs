@@ -226,12 +226,14 @@ handleDecl' d = do
             ppterm <- ppDecl decl'
             addDecl $ Decl p x t $ val2term v
           EvalCEK -> do
+            printFD4 "Evaluando sobre Máquina CEK"
             (Decl p x t tt) <- typecheckDecl d
             v <- seek tt
             let tt' = val2term v
             let decl' = Decl p x t tt'
             ppterm <- ppDecl decl'
             addDecl $ Decl p x t $ val2term v
+            printFD4 $ show  tt
             profEnabled <- getProf
             when profEnabled (do
               s <- gets statistics
@@ -247,6 +249,7 @@ typecheckDecl (Decl p x ty t) = do
   decl@(Decl _ _ _ tt) <- tcDecl (Decl p x ty term)
   opt <- getOpt
   if opt then
+    printFD4 "Optimizando..." >>
     optimizeTerm tt >>= \tt' ->
     return (Decl p x ty tt')
   else

@@ -41,8 +41,8 @@ seek' term p k = incTranCount >> case term of
         Nothing  -> failFD4 $ "Variable global " ++ name ++ " no encontrada."
     (V _ _)             -> failFD4 "seek' no esperaba variables libres"
     (Const _ (CNat n))  -> destroy (Vall n) k
-    (Lam _ n ty (Sc1 t)) -> incClosCount >>  destroy (ClosFun p n ty t) k
-    (Fix _ n1 ty1 n2 ty2 (Sc2 t)) -> incClosCount >> destroy (ClosFix p n1 ty1 n2 ty2 t) k
+    (Lam _ n ty (Sc1 t)) ->   destroy (ClosFun p n ty t) k
+    (Fix _ n1 ty1 n2 ty2 (Sc2 t)) -> destroy (ClosFix p n1 ty1 n2 ty2 t) k
     (Let info n ty s (Sc1 t))   -> seek' (App info (Lam info n ty (Sc1 t)) s) p k
 
 destroy :: MonadFD4 m => Val          -> Kont -> m Val
@@ -54,7 +54,7 @@ destroy var kont = incTranCount >> go var kont
         go (Vall 0) ((IfZEval p t1 _):ks) = seek' t1 p ks
         go (Vall n) ((IfZEval p _ t2):ks) = seek' t2 p ks
         go v ((AppEval p t):ks) = seek' t p (Clos v:ks)
-        go v ((Clos val):ks) = case val of
+        go v ((Clos val):ks) = incClosCount >> case val of
             (ClosFun p _ _ t)     -> seek' t (v:p) ks
             (ClosFix p _ _ _ _ t) -> seek' t (v:val:p) ks
             _                     -> failFD4 "Destroy esperaba clausura y recibio Vall"
