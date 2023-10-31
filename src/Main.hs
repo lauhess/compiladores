@@ -61,37 +61,37 @@ parseMode = (,,,) <$>
       )
    -- <*> pure False
    -- reemplazar por la siguiente línea para habilitar opción
-      <*> flag False True (long "cek" <> short 'k' <> help "Optimizar código")
-      <*> flag False True (long "profile" <> short 'p' <> help "Activar profiling")
       <*> flag False True (long "optimize" <> short 'o' <> help "Optimizar código")
+      <*> flag False True (long "profile" <> short 'p' <> help "Activar profiling")
+      <*> flag False True (long "cek" <> short 'k' <> help "Optimizar código")
 
 -- | Parser de opciones general, consiste de un modo y una lista de archivos a procesar
 parseArgs :: Parser (Mode, Bool, Bool, Bool, [FilePath])
-parseArgs = (\(a,b, p, cek) c -> (a,p,b,cek,c)) <$> parseMode <*> many (argument str (metavar "FILES..."))
+parseArgs = (\(a, opt, prof, cek) c -> (a, opt, prof, cek, c)) <$> parseMode <*> many (argument str (metavar "FILES..."))
 
 main :: IO ()
-main = execParser opts >>= go
+main = execParser opts >>= \x@(a,b,c,d,_) -> putStrLn ("Options: " ++ show a ++ show b ++ show c ++ show d) >> go x
   where
     opts = info (parseArgs <**> helper)
       ( fullDesc
      <> progDesc "Compilador de FD4"
-     <> header "Compilador de FD4 de la materia Compiladores 2022" )
+     <> header "Compilador de FD4 de la materia Compiladores 2023" )
 
     --     Modo, optimizar, profiling, cek, archivos
     go :: (Mode,Bool,Bool,Bool,[FilePath]) -> IO ()
     go (Interactive, opt, prof, True,files) =
               runOrFail (Conf prof opt InteractiveCEK) (runInputT defaultSettings (repl files) >> mapM_ compileFile files)
-    go (Interactive,opt, prof, False,files) =
+    go (Interactive, opt, prof, False,files) =
               runOrFail (Conf prof opt Interactive) (runInputT defaultSettings (repl files) >> mapM_ compileFile files)
     -- go (Eval ,opt, prof, True,files) =
     --           runOrFail (Conf prof opt EvalCEK) (runInputT defaultSettings (repl files) >>  mapM_ compileFile files)
     -- go (Eval ,opt, prof, False, files) =
     --           runOrFail (Conf prof opt Eval) (runInputT defaultSettings (repl files) >>  mapM_ compileFile files)
-    go (Bytecompile, opt,prof, cek,files) =
+    go (Bytecompile, opt, prof, cek, files) =
               runOrFail (Conf prof opt Bytecompile) $ mapM_ byteCompileFile  files
-    go (RunVM, opt, prof,cek,files) =
+    go (RunVM, opt, prof, cek, files) =
               runOrFail (Conf prof opt RunVM) $ mapM_ byteRunVmFile files
-    go (m,opt, prof, cek,files) =
+    go (m, opt, prof, cek, files) =
               runOrFail (Conf prof opt (if cek then EvalCEK else m) ) $ mapM_ compileFile files
 
 runOrFail :: Conf -> FD4 a -> IO a

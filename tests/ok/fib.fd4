@@ -1,0 +1,11 @@
+let rec fib (x:Nat) : Nat = 
+  ifz x then 1 else 
+    ifz (x - 1) then 1 else
+        fib (x - 1) + fib (x - 2)
+
+let fib1 : Nat = print "fib 1 = " (fib 1)
+let fib2 : Nat = print "fib 2 = " (fib 2)
+let fib3 : Nat = print "fib 3 = " (fib 3)
+let fib4 : Nat = print "fib 4 = " (fib 4)
+let fib5 : Nat = print "fib 5 = " (fib 5)
+

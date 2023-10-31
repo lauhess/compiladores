@@ -216,8 +216,8 @@ bytecompileModule m = do
     let t' = decl2term m
     opt <- getOpt
     t <- if opt then optimizeTerm t' else return t'
-    pt <- pp t
-    printFD4 pt
+    -- pt <- pp t
+    -- printFD4 pt
     bc <- bcc t
     let optBC = optimizeBytecode bc
     -- printFD4 $ intercalate "\n" $ showOps bc
@@ -311,7 +311,7 @@ incOpCount = gets statistics >>= \case
   (StatsBytecode op cl mp) -> modify (\s -> s {
       statistics = StatsBytecode (op + 1) cl mp
     })
-  (StatsCEK _ _) -> failFD4 "Tipo de estadistica equivocado"
+  (StatsCEK _ _) -> failFD4 "Tipo de estadística equivocado."
   _ -> return ()
 
 incOpClaus :: MonadFD4 m => m ()
@@ -319,7 +319,7 @@ incOpClaus = gets statistics >>= \case
   (StatsBytecode op cl mp) -> modify (\s -> s {
       statistics = StatsBytecode op (cl + 1) mp
     })
-  (StatsCEK _ _) -> failFD4 "Tipo de estadistica equivocado"
+  (StatsCEK _ _) -> failFD4 "Tipo de estadística equivocado."
   _ -> return ()
 
 incOpMaxPilaSize :: MonadFD4 m => [Val] -> m ()
@@ -327,5 +327,5 @@ incOpMaxPilaSize stack = gets statistics >>= \case
   (StatsBytecode op cl mp) -> modify (\s -> s {
       statistics = StatsBytecode op cl (max mp (length stack))
     })
-  (StatsCEK _ _) -> failFD4 "Tipo de estadistica equivocado"
+  (StatsCEK _ _) -> failFD4 "Tipo de estadística equivocado."
   _ -> return ()
