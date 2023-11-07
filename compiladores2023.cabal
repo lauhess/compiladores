@@ -42,6 +42,7 @@ executable compiladores2023
         TypeChecker
         CEK
         Optimization
+        ClosureConvert
 
     ghc-options: 
         -threaded 
