@@ -18,16 +18,24 @@ decl2irDecl (Decl _ name (FunTy declTy retTy) t) = IrFun name (head $ ty2irTy re
 
 closureConvert :: TTerm -> [Name] -> StateT Int (Writer [IrDecl]) Ir
 closureConvert t bounds = case t of
-  V _ (Bound n) -> mkWS (IrVar (bounds !! n)) 0 []
+  V _ (Bound n) -> failFD4 "Falto consumir alguna lambda"
   V _ (Free n) -> mkWS (IrVar n) 0 []
   V _ (Global n) -> mkWS (IrGlobal n) 0 []
   Const _ co@(CNat n) ->
     mkWS (IrConst co) 0 []
-  Lam _ fn ty (Sc1 tm) -> 
-    let bounds'@(name':_) = (cfreshen bounds fn:bounds)
-        fn' = "_" ++ name'
-        ((ir, s'), irds) = runWS tm 0 bounds'
-    in mkWS (MkClosure fn' (map IrVar bounds')) s' irds
+  Lam _ fn ty (Sc1 tm) -> do
+    let (names, tm') = cfreshen bounds fn tm
+        fn' = "_" ++ head names
+        varLibres = map IrVar (freeVars tm')
+        cloName = "_" ++ fn'
+    ttt <- closureConvert t bounds
+    tell _
+    let body = fst $ fst $ runWS tm' 0 names
+        bodyBoundingVars = foldr (\(i, IrVar name) body'  -> 
+          IrLet name IrInt (IrAccess (IrVar cloName) IrInt i) body') 
+          body
+          (zip [1..] varLibres)
+    return $ MkClosure fn' varLibres
   App _ tm tm' -> _
   Print _ str tm ->
     let ((ir1, s1), irds) = runWS tm 0 bounds
@@ -54,5 +62,7 @@ runWS t s bounds = runWriter $ runStateT (closureConvert t bounds) s
 mkWS :: Ir -> Int -> [IrDecl] -> StateT Int (Writer [IrDecl]) Ir
 mkWS ir s irds = StateT (\s' -> writer ((ir, s + s'), irds))
 
-cfreshen :: [Name] -> Name -> Name
-cfreshen ns n = "_" ++ freshen ns n
+cfreshen :: [Name] -> Name -> TTerm -> ([Name], TTerm)
+cfreshen ns n tm = let newNames = "_" ++ freshen ns n
+                       newTree = open newName (Sc1 tm)
+                    in (newNames, newTree)
