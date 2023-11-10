@@ -40,6 +40,9 @@ import CEK
 import GHC.Base (sequence)
 import Bytecompile (bytecompileModule, bcWrite, bcRead, runBC, showBC)
 import Optimization (optimizeTerm)
+import C
+import ClosureConvert
+import IR
 
 prompt :: String
 prompt = "FD4> "
@@ -54,7 +57,7 @@ parseMode = (,,,) <$>
       <|> flag' RunVM (long "runVM" <> short 'r' <> help "Ejecutar bytecode en la BVM")
       <|> flag Interactive Interactive ( long "interactive" <> short 'i' <> help "Ejecutar en forma interactiva")
       <|> flag Eval        Eval        (long "eval" <> short 'e' <> help "Evaluar programa")
-  -- <|> flag' CC ( long "cc" <> short 'c' <> help "Compilar a código C")
+      <|> flag' CC ( long "cc" <> short 'c' <> help "Compilar a código C")
   -- <|> flag' Canon ( long "canon" <> short 'n' <> help "Imprimir canonicalización")
   -- <|> flag' Assembler ( long "assembler" <> short 'a' <> help "Imprimir Assembler resultante")
   -- <|> flag' Build ( long "build" <> short 'b' <> help "Compilar")
@@ -151,17 +154,12 @@ byteCompileFile f = do
     prog <- case sdecl of
       Nothing -> failFD4 "Error de compilacion"
       Just decl ->  mapM (\sd -> typecheckDecl sd >>= \d -> addDecl d >> return d) decl
-    --prog <- mapM (\sd -> typecheckDecl sd >>= \d -> addDecl d >> return d) (sequence' mdecls)
     printFD4 $  "Compilando " ++ f ++ " a bytecode "
     bytecode <- bytecompileModule prog
     let fp = (reverse . dropWhile (/= '.') . reverse) f ++ "bc32"
     printFD4 $ "Escribiendo bytecode a " ++ fp
     liftIO (bcWrite bytecode fp)
-    --where 
-    --  sequence' :: [Maybe a] -> [a]
-    --  sequence' [] = []
-    --  sequence' (Nothing:xs) = sequence' xs
-    --  sequence' (Just x:xs) = x : sequence' xs
+
 byteRunVmFile :: MonadFD4 m => FilePath -> m ()
 byteRunVmFile f = do
   --printFD4 ("Abriendo " ++ f ++ "...")
@@ -178,6 +176,20 @@ byteRunVmFile f = do
               "\nTamano maximo pila: " ++ show mp ++
               "\n")
 
+
+ccCopileFile :: MonadFD4 m => FilePath -> m ()
+ccCopileFile f = do
+  printFD4 ("Abriendo " ++ f ++ "...")
+  sdecls <- loadFile f
+  mdecls <- mapM elabDecl sdecls
+  let sdecl = GHC.Base.sequence mdecls
+  prog <- case sdecl of
+    Nothing -> failFD4 "Error de compilacion"
+    Just decl ->  mapM (\sd -> typecheckDecl sd >>= \d -> addDecl d >> return d) decl
+  printFD4 $  "Compilando " ++ f ++ " a C "
+  let ir = runCC prog
+      sourceC = ir2C ir
+  liftIO $ writeFile (f ++ ".c") sourceC
 
 parseIO ::  MonadFD4 m => String -> P a -> String -> m a
 parseIO filename p x = case runP p x filename of

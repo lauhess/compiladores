@@ -50,7 +50,7 @@ data Mode =
   | EvalCEK
   | Bytecompile
   | RunVM
-  -- | CC
+  | CC
   -- | Canon
   -- | Assembler
   -- | Build
