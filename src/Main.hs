@@ -42,7 +42,6 @@ import Bytecompile (bytecompileModule, bcWrite, bcRead, runBC, showBC)
 import Optimization (optimizeTerm)
 import C
 import ClosureConvert
-import IR
 
 prompt :: String
 prompt = "FD4> "
@@ -94,6 +93,8 @@ main = execParser opts >>= \x@(a,b,c,d,_) -> putStrLn ("Options: " ++ show a ++ 
               runOrFail (Conf prof opt Bytecompile) $ mapM_ byteCompileFile  files
     go (RunVM, opt, prof, cek, files) =
               runOrFail (Conf prof opt RunVM) $ mapM_ byteRunVmFile files
+    go (CC, opt, prof, cek, files) =
+              runOrFail (Conf prof opt CC) $ mapM_ ccCopileFile files
     go (m, opt, prof, cek, files) =
               runOrFail (Conf prof opt (if cek then EvalCEK else m) ) $ mapM_ compileFile files
 
