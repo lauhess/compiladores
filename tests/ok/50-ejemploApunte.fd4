@@ -1,0 +1,5 @@
+let example : Nat = 
+    let (a : Nat) = 2
+    in let (f : Nat -> Nat) = fun (y : Nat) -> let (b : Nat) = 4 in 
+           let (g : Nat -> Nat) = fun (z : Nat)-> z + a + b in y + g 5
+       in f 3
