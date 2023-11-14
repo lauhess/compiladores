@@ -42,6 +42,7 @@ import Bytecompile (bytecompileModule, bcWrite, bcRead, runBC, showBC)
 import Optimization (optimizeTerm)
 import C
 import ClosureConvert
+import Debug.Trace
 
 prompt :: String
 prompt = "FD4> "
@@ -157,9 +158,12 @@ byteCompileFile f = do
       Just decl ->  mapM (\sd -> typecheckDecl sd >>= \d -> addDecl d >> return d) decl
     printFD4 $  "Compilando " ++ f ++ " a bytecode "
     bytecode <- bytecompileModule prog
-    let fp = (reverse . dropWhile (/= '.') . reverse) f ++ "bc32"
+    let fp = changeExtension f "bc32"
     printFD4 $ "Escribiendo bytecode a " ++ fp
     liftIO (bcWrite bytecode fp)
+
+changeExtension :: FilePath -> String -> FilePath
+changeExtension f e = (reverse . dropWhile (/= '.') . reverse) f ++ e
 
 byteRunVmFile :: MonadFD4 m => FilePath -> m ()
 byteRunVmFile f = do
@@ -190,7 +194,8 @@ ccCopileFile f = do
   printFD4 $  "Compilando " ++ f ++ " a C "
   let ir = runCC prog
       sourceC = ir2C ir
-  liftIO $ writeFile (f ++ ".c") sourceC
+  trace (show ir) $ return ()
+  liftIO $ writeFile (changeExtension f "c") sourceC
 
 parseIO ::  MonadFD4 m => String -> P a -> String -> m a
 parseIO filename p x = case runP p x filename of
