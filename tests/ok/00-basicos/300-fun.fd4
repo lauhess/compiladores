@@ -1,3 +1,7 @@
 let f : Nat -> Nat = fun (x:Nat) -> x+1
 
 let res : Nat = print "res = " (f 100)
+
+let g (x  : Nat) (y : Nat) : Nat = x + y
+
+let res2 : Nat = print "res = " (g 100 200)

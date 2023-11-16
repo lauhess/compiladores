@@ -39,9 +39,10 @@ closureConvert t bounds = case t of
          IrLet name ty' (IrAccess (IrVar cloName) IrInt i) body')
           body
           (zip [1..] bounds)
-    tell [IrFun cloName IrClo [(fn', IrInt)] bodyBoundingVars]
+    tell [IrFun cloName (convertType ty) [("x", IrClo),(fn', IrInt)] bodyBoundingVars]
     return $ MkClosure cloName varLibres
   App (_,ty) t1 t2 -> do
+    trace (show ty) $ return ()
     let dummyName = freshen (map snd bounds) "_dummy"
     ir1 <- closureConvert t1 bounds
     ir2 <- closureConvert t2 bounds
