@@ -3,12 +3,11 @@ module ClosureConvert where
 import Lang
 import IR
 import Control.Monad.Writer (Writer, MonadWriter (tell), runWriter)
-import PPrint (freshen)
 import MonadFD4
 import Subst
 import Debug.Trace
 
-type CCState a = StateT Int (Writer [IrDecl]) a
+type CCState a = StateT (Int, [(Name,IrTy)]) (Writer [IrDecl]) a
 
 type TyName = (IrTy, Name)
 
@@ -22,45 +21,44 @@ type TyName = (IrTy, Name)
 -- decl2irDecl (Decl _ name NatTy t) = IrVal name IrInt (term2ir t)
 -- decl2irDecl (Decl _ name (FunTy declTy retTy) t) = IrFun name (head $ ty2irTy retTy) (ty2irTy declTy) (term2ir t)
 
-closureConvert :: TTerm -> [TyName] -> CCState Ir
-closureConvert t bounds = case t of
+closureConvert :: TTerm -> CCState Ir
+closureConvert t = case t of
   V _ (Bound n) -> error "Falto consumir alguna lambda"
   V _ (Free n) -> return $ IrVar n
   V _ (Global n) -> return $ IrGlobal n
   Const _ co@(CNat n) -> return $ IrConst co
   Lam _ fn ty (Sc1 tm) -> do
-    let a@(names, tm') = cfreshen bounds (convertType ty, fn) tm -- Libero un nuevo nombre
-        fn' = (snd . head) names              -- Nombre nuevo para la funcion
-        varLibres = map IrVar (freeVars tm) -- Lista de valiables libres
-        cloName = "_" ++ fn'                 -- Nombre de la closure
-    body <- closureConvert tm' names
-    -- tell _
-    let bodyBoundingVars = foldr (\(i, (ty', name)) body'  ->
+    (tm', fn') <- cfreshen fn (convertType ty) tm -- Libero un nuevo nombre
+    let varLibres = map IrVar (freeVars tm) -- Lista de valiables libres
+    cloName <- cfreshenName fn                 -- Nombre de la closure
+    bounds <- getFreeVars' tm
+    body <- closureConvert tm'
+    trace (show bounds) $ return ()
+    let bodyBoundingVars = foldr (\(i, (name, ty')) body'  ->
          IrLet name ty' (IrAccess (IrVar cloName) IrInt i) body')
           body
           (zip [1..] bounds)
+    trace (show bodyBoundingVars) $ return ()
     tell [IrFun cloName (convertType ty) [("x", IrClo),(fn', IrInt)] bodyBoundingVars]
     return $ MkClosure cloName varLibres
   App (_,ty) t1 t2 -> do
     trace (show ty) $ return ()
-    let dummyName = freshen (map snd bounds) "_dummy"
-    ir1 <- closureConvert t1 bounds
-    ir2 <- closureConvert t2 bounds
+    dummyName <- cfreshenName "App"
+    ir1 <- closureConvert t1
+    ir2 <- closureConvert t2
     return $ IrLet dummyName IrClo ir1 (IrCall (IrAccess (IrVar dummyName) IrFunTy 0) [IrVar dummyName,ir2] (convertType ty))
     -- return $ IrCall ir1 [ir2] IrInt
   Print _ str tm -> do
-      ir1 <- closureConvert tm bounds
+      ir1 <- closureConvert tm
       return $ IrPrint str ir1
   BinaryOp _ op t1 t2 -> do
-    ir1 <- closureConvert t1 bounds
-    ir2 <- closureConvert t2 bounds
+    ir1 <- closureConvert t1
+    ir2 <- closureConvert t2
     return $ IrBinaryOp op ir1 ir2
   Fix _ fn ty str ty' (Sc2 tm) -> do
-    let (names, tm') = cfreshen2 bounds (convertType ty, fn) (convertType ty', str) tm -- Libero un nuevo nombre
-        fn' = "_" ++ (snd . head) names               -- Nombre nuevo para la funcion
-        varLibres = map IrVar (freeVars tm')  -- Lista de valiables libres
-        cloName = "_" ++ fn'                  -- Nombre de la closure
-    body <- closureConvert tm' names
+    (tm', fn', cloName) <- cfreshen2 fn (convertType ty) str (convertType ty') tm -- Libero un nuevo nombre
+    let varLibres = map IrVar (freeVars tm')  -- Lista de valiables libres
+    body <- closureConvert tm'
     -- tell _
     let bodyBoundingVars = foldr (\(i, IrVar name) body'  ->
          IrLet name IrInt (IrAccess (IrVar cloName) IrInt i) body')
@@ -69,47 +67,50 @@ closureConvert t bounds = case t of
     tell [IrFun cloName IrClo [(fn', IrInt)] bodyBoundingVars]
     return $ MkClosure fn' varLibres
   IfZ _ t1 t2 t3 -> do
-    ir1 <- closureConvert t1 bounds
-    ir2 <- closureConvert t2 bounds
-    ir3 <- closureConvert t3 bounds
+    ir1 <- closureConvert t1 
+    ir2 <- closureConvert t2 
+    ir3 <- closureConvert t3 
     return $ IrIfZ ir1 ir2 ir3
   Let _ name ty t1 (Sc1 t2) -> do
-    ir1 <- closureConvert t1 bounds
-    let (bounds', t2') = cfreshen bounds (convertType ty, name) t2
-    ir2 <- closureConvert t2' bounds'
-    return $ IrLet ((snd . head) bounds') (convertType ty) ir1 ir2
+    ir1 <- closureConvert t1
+    (t2', name') <- cfreshen name (convertType ty) t2
+    ir2 <- closureConvert t2'
+    return $ IrLet name' (convertType ty) ir1 ir2
 
-cfreshen :: [TyName] -> TyName -> TTerm -> ([TyName], TTerm)
-cfreshen ns (ty,n) tm = let newName = "_" ++ freshen (map snd ns) n
-                            newTree = open newName (Sc1 tm)
-                        in ((ty,newName):ns, newTree)
+cfreshenName :: Name -> CCState Name
+cfreshenName name = do
+  (i, ns) <- get
+  let newName = "_" ++ show i ++ name ++ "_"
+  put (i+1, ns)
+  return newName
 
-cfreshen2 :: [TyName] -> TyName -> TyName -> TTerm -> ([TyName], TTerm)
-cfreshen2 ns (ty1, n1) (ty2, n2) tm =
-  let ns' = map snd ns
-      name1 = "_" ++ freshen ns' n1
-      name2 = "_" ++ freshen (name1:ns') n2
-      newNames = (ty1, name1):(ty2,name2):ns
-      newTree = open2 name1 name2 (Sc2 tm)
-  in (newNames, newTree)
+cfreshen :: Name -> IrTy -> TTerm -> CCState (TTerm, Name)
+cfreshen name ty tm = do 
+  (i, ns) <- get
+  let newName = "_" ++ show i ++ name ++ "_"
+  put (i+1, (newName, ty):ns)
+  return (open newName (Sc1 tm), newName)
 
--- runCC :: Module -> IrDecls
--- runCC [] = IrDecls []
--- runCC m = let (_, decls) = runWriter $ runStateT  (runCC' m)
---           in IrDecls decls
+cfreshen2 :: Name -> IrTy -> Name -> IrTy -> TTerm -> CCState (TTerm, Name, Name)
+cfreshen2 n1 ty1 n2 ty2 tm = do
+  (i, ns) <- get
+  let newName1 = "_" ++ show i ++ n1 ++ "_"
+      newName2 = "_" ++ show (i + 1) ++ n1 ++ "_"
+  put (i+2, (newName1,ty1):(newName2, ty2):ns)
+  return (open2 newName1 newName2 (Sc2 tm), newName1, newName2)
 
 runCC :: [Decl TTerm] -> IrDecls
 runCC m = let mon = runCC' m
-          in IrDecls $ (snd . runWriter . runStateT mon) 0
+          in IrDecls $ (snd . runWriter . runStateT mon) (0,[])
 
 -- closureConvertModule :: Module -> CCState
 runCC' :: Module -> CCState ()
 runCC' [Decl _ name ty t] = do
-  r <- closureConvert t []
+  r <- closureConvert t
   tell [IrVal name (convertType ty) r]
   return ()
 runCC'((Decl _ name ty t):ms) = do
-  r <- closureConvert t []
+  r <- closureConvert t
   tell [IrVal name (convertType ty) r]
   runCC' ms
 runCC' _ = error "No se puede convertir"
@@ -117,3 +118,9 @@ runCC' _ = error "No se puede convertir"
 convertType :: Ty -> IrTy
 convertType NatTy = IrInt
 convertType (FunTy _ _) = IrClo
+
+getFreeVars' :: TTerm -> CCState [(Name, IrTy)]
+getFreeVars' t = do
+  (i, ns) <- get
+  let libres = freeVars t
+  return $ filter (\(n,_) -> n `elem` libres) ns
