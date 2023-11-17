@@ -4,7 +4,7 @@ import Prettyprinter.Render.Terminal ( renderStrict )
 import IR
 import Lang
 import Data.Text (unpack)
-import Data.Char ( isAlpha, ord )
+import Data.Char ( isAlpha, ord, isDigit )
 
 ty2doc :: IrTy -> Doc a
 ty2doc IrInt = pretty "uint64_t"
@@ -37,10 +37,13 @@ name n = pretty $ "fd4_" ++ escape n    --prefijo fd4 para evitar colision con n
 
 -- Convierte nombres con caracteres no válidos en C (como la comilla simple)
 -- a nombres válidos.
+
+escape :: [Char] -> [Char]
 escape = concatMap e1 where
   e1 :: Char -> String
   e1 c | c == '_'  = "__"
        | isAlpha c = [c]
+       | isDigit c = [c]
        | otherwise = "_" ++ show (ord c)
 
 stmt :: Doc a -> Doc a

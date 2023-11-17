@@ -28,9 +28,10 @@ closureConvert t = case t of
   V _ (Global n) -> return $ IrGlobal n
   Const _ co@(CNat n) -> return $ IrConst co
   Lam _ fn ty (Sc1 tm) -> do
-    (tm', fn') <- cfreshen fn (convertType ty) tm -- Libero un nuevo nombre
+    (tm', varName) <- cfreshen fn (convertType ty) tm -- Libero un nuevo nombre
     let varLibres = map IrVar (freeVars tm) -- Lista de valiables libres
     cloName <- cfreshenName fn                 -- Nombre de la closure
+    fn' <- cfreshenName fn                     -- Nombre de la función
     bounds <- getFreeVars' tm
     body <- closureConvert tm'
     bounds' <- getFreeVars' tm'
@@ -39,7 +40,7 @@ closureConvert t = case t of
           body
           (zip [1..] bounds)
     tell [IrFun fn' (convertType ty) ((cloName, IrClo):bounds') bodyBoundingVars]
-    trace ("-> En: " ++ fn ++ "\n\tfn': " ++ fn' ++ "\n\tCloName: " ++ cloName ++ "\n\t ListaBounds: " ++ (show bounds) ++ "\n\t ListaBounds': " ++ (show bounds')) $ return ()
+    trace ("-> En: " ++ fn ++ "\n\tvarName: " ++ varName ++ "\n\tCloName: " ++ cloName ++ "\n\t ListaBounds: " ++ (show bounds) ++ "\n\t ListaBounds': " ++ (show bounds')) $ return ()
     return $ MkClosure fn' varLibres
   App (_,ty) t1 t2 -> do
     dummyName <- cfreshenName "App"
