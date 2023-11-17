@@ -33,16 +33,15 @@ closureConvert t = case t of
     cloName <- cfreshenName fn                 -- Nombre de la closure
     bounds <- getFreeVars' tm
     body <- closureConvert tm'
-    trace (show bounds) $ return ()
+    bounds' <- getFreeVars' tm'
     let bodyBoundingVars = foldr (\(i, (name, ty')) body'  ->
          IrLet name ty' (IrAccess (IrVar cloName) IrInt i) body')
           body
           (zip [1..] bounds)
-    trace (show bodyBoundingVars) $ return ()
-    tell [IrFun cloName (convertType ty) [("x", IrClo),(fn', IrInt)] bodyBoundingVars]
-    return $ MkClosure cloName varLibres
+    tell [IrFun fn' (convertType ty) ((cloName, IrClo):bounds') bodyBoundingVars]
+    trace ("-> En: " ++ fn ++ "\n\tfn': " ++ fn' ++ "\n\tCloName: " ++ cloName ++ "\n\t ListaBounds: " ++ (show bounds) ++ "\n\t ListaBounds': " ++ (show bounds')) $ return ()
+    return $ MkClosure fn' varLibres
   App (_,ty) t1 t2 -> do
-    trace (show ty) $ return ()
     dummyName <- cfreshenName "App"
     ir1 <- closureConvert t1
     ir2 <- closureConvert t2
