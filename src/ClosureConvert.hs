@@ -27,8 +27,8 @@ closureConvert t = case t of
   V _ (Free n) -> return $ IrVar n
   V _ (Global n) -> return $ IrGlobal n
   Const _ co@(CNat n) -> return $ IrConst co
-  Lam _ fn ty (Sc1 tm) -> do
-    (tm', varName) <- cfreshen fn (convertType ty) tm -- Libero un nuevo nombre
+  Lam (_, (FunTy _ ty)) fn tyVar (Sc1 tm) -> do
+    (tm', varName) <- cfreshen fn (convertType tyVar) tm -- Libero un nuevo nombre
     let varLibres = map IrVar (freeVars tm) -- Lista de valiables libres
     cloName <- cfreshenName fn                 -- Nombre de la closure
     fn' <- cfreshenName fn                     -- Nombre de la función
@@ -38,7 +38,7 @@ closureConvert t = case t of
     let bodyBoundingVars = foldr (\(i, (name, ty')) body'  ->
          IrLet name ty' (IrAccess (IrVar cloName) IrInt i) body')
           body
-          (zip [1..] bounds)
+          (zip [1..] (reverse bounds))
     tell [IrFun fn' (convertType ty) ((cloName, IrClo):bounds') bodyBoundingVars]
     trace ("-> En: " ++ fn ++ "\n\tvarName: " ++ varName ++ "\n\tCloName: " ++ cloName ++ "\n\t ListaBounds: " ++ (show bounds) ++ "\n\t ListaBounds': " ++ (show bounds')) $ return ()
     return $ MkClosure fn' varLibres
@@ -46,6 +46,7 @@ closureConvert t = case t of
     dummyName <- cfreshenName "App"
     ir1 <- closureConvert t1
     ir2 <- closureConvert t2
+    trace ("===> " ++ dummyName ++ show ty) $ return ()
     return $ IrLet dummyName IrClo ir1 (IrCall (IrAccess (IrVar dummyName) IrFunTy 0) [IrVar dummyName,ir2] (convertType ty))
     -- return $ IrCall ir1 [ir2] IrInt
   Print _ str tm -> do
