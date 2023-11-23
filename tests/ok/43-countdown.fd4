@@ -1,3 +1,4 @@
 let rec countDown (n : Nat) : Nat =
     ifz n then n else countDown (n - 1)
 let x : Nat = countDown 2
+let p : Nat = print "Hello, World!" x
