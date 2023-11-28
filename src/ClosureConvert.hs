@@ -28,26 +28,28 @@ closureConvert t = case t of
   V _ (Global n) -> return $ IrGlobal n
   Const _ co@(CNat n) -> return $ IrConst co
   Lam (_, FunTy _ ty) fn tyVar (Sc1 tm) -> do
-    (tm', varName) <- cfreshen fn (convertType tyVar) tm -- Libero un nuevo nombre
+    let varTy = convertType tyVar 
+    (tm', varName) <- cfreshen fn varTy tm -- Libero un nuevo nombre
     let varLibres = map IrVar (freeVars tm) -- Lista de valiables libres
     cloName <- cfreshenName fn                 -- Nombre de la closure
-    fn' <- cfreshenName fn                     -- Nombre de la función
-    bounds <- getFreeVars' tm
+    funName <- cfreshenName fn                     -- Nombre de la función
+    bounds <- getFreeVars' tm               -- Bounds de la funcion
     body <- closureConvert tm'
-    bounds' <- getFreeVars' tm'
+    -- bounds' <- getFreeVars' tm'
     let bodyBoundingVars = foldr (\(i, (name, ty')) body'  ->
-         IrLet name ty' (IrAccess (IrVar cloName) IrInt i) body')
+         IrLet name ty' (IrAccess (IrVar cloName) ty' i) body')
           body
           (zip [1..] (reverse bounds))
-    tell [IrFun fn' (convertType ty) ((cloName, IrClo):bounds') bodyBoundingVars]
-    trace ("-> En: " ++ fn ++ "\n\tvarName: " ++ varName ++ "\n\tCloName: " ++ cloName ++ "\n\t ListaBounds: " ++ (show bounds) ++ "\n\t ListaBounds': " ++ (show bounds')) $ return ()
-    return $ MkClosure fn' varLibres
+    tell [IrFun funName (convertType ty) ((cloName, IrClo):(varName,varTy):bounds) bodyBoundingVars]
+    -- trace ("-> En: " ++ fn ++ "\n\tvarName: " ++ varName ++ "\n\tCloName: " ++ cloName ++ "\n\t ListaBounds: " ++ (show bounds)) $ return ()
+    trace ("->"  ++ show bodyBoundingVars ++ "\n") $ return ()
+    return $ MkClosure funName varLibres
   Lam {} -> error "Lam: Tipo invalido"
   App (_,ty) t1 t2 -> do
     dummyName <- cfreshenName "App"
     ir1 <- closureConvert t1
     ir2 <- closureConvert t2
-    trace ("===> " ++ dummyName ++ show ty) $ return ()
+    -- trace ("===> " ++ dummyName ++ show ty) $ return ()
     return $ IrLet dummyName IrClo ir1 (IrCall (IrAccess (IrVar dummyName) IrFunTy 0) [IrVar dummyName,ir2] (convertType ty))
     -- return $ IrCall ir1 [ir2] IrInt
   Print _ str tm -> do
@@ -58,20 +60,26 @@ closureConvert t = case t of
     ir2 <- closureConvert t2
     return $ IrBinaryOp op ir1 ir2
   Fix (_, FunTy _ ty) fn ty1 x ty2 (Sc2 tm) -> do
-    (tm', cloName, _) <- cfreshen2 fn (convertType ty1) x (convertType ty2) tm -- Libero un nuevo nombre
-    let varLibres = map IrVar (freeVars tm')   -- Lista de valiables libres
-    -- cloName <- cfreshenName fn                 -- Nombre de la closure
-    fn' <- cfreshenName fn                     -- Nombre de la función
-    bounds <- getFreeVars' tm
+    let varTy = convertType ty2
+        funTy = convertType ty1
+        fixTy = convertType ty 
+    (tm', cloName, varName) <- cfreshen2 fn funTy x varTy tm -- Libero un nuevo nombre
+    let varLibres = map IrVar (freeVars tm) -- Lista de valiables libres
+    --cloName <- cfreshenName fn                 -- Nombre de la closure
+    -- funName <- cfreshenName fn                     -- Nombre de la función
+    bounds <- getFreeVars' tm               -- Bounds de la funcion
     body <- closureConvert tm'
-    bounds' <- getFreeVars' tm'
+    traceM ("Un prefijo " ++ show body)
+    -- bounds' <- getFreeVars' tm'
     let bodyBoundingVars = foldr (\(i, (name, ty')) body'  ->
-         IrLet name ty' (IrAccess (IrVar fn') IrInt i) body')
+         IrLet name ty' (IrAccess (IrVar cloName) ty' i) body')
           body
-          (zip [1..] (filter (\(name,_) -> name /= cloName) (reverse bounds)))
-    tell [IrFun fn' (convertType ty) ((cloName, IrClo):filter (\(name,_) -> name /= cloName) bounds') bodyBoundingVars]
-    trace ("-> En: " ++ fn ++ "\n\tCloName: " ++ cloName ++ "\n\t ListaBounds: " ++ (show bounds) ++ "\n\t ListaBounds': " ++ (show bounds')) $ return ()
-    return $ MkClosure fn' varLibres
+          (zip [1..] (reverse bounds))
+    --let bodyBoundingVars = IrLet funName' IrClo (IrVar funName) bodyBoundingVars'
+    tell [IrFun cloName funTy [(cloName, IrClo),(varName, IrInt)] bodyBoundingVars]
+    -- trace ("-> En: " ++ fn ++ "\n\tvarName: " ++ varName ++ "\n\tCloName: " ++ cloName ++ "\n\t ListaBounds: " ++ (show bounds)) $ return ()
+    trace ("->"  ++ show bodyBoundingVars ++ "\n") $ return ()
+    return $ MkClosure cloName varLibres
   Fix {} -> error "Fix: Tipo invalido"
   IfZ _ t1 t2 t3 -> do
     ir1 <- closureConvert t1
