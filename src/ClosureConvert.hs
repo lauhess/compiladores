@@ -60,26 +60,32 @@ closureConvert t = case t of
     ir2 <- closureConvert t2
     return $ IrBinaryOp op ir1 ir2
   Fix (_, FunTy _ ty) fn ty1 x ty2 (Sc2 tm) -> do
+    -- Obtengo las variables libres del término 
+    let varLibres = map IrVar (freeVars tm) 
+    -- Tipos de la variable y la función
     let varTy = convertType ty2
         funTy = convertType ty1
-        fixTy = convertType ty 
-    (tm', cloName, varName) <- cfreshen2 fn funTy x varTy tm -- Libero un nuevo nombre
-    let varLibres = map IrVar (freeVars tm) -- Lista de valiables libres
-    --cloName <- cfreshenName fn                 -- Nombre de la closure
-    -- funName <- cfreshenName fn                     -- Nombre de la función
-    bounds <- getFreeVars' tm               -- Bounds de la funcion
-    body <- closureConvert tm'
-    traceM ("Un prefijo " ++ show body)
-    -- bounds' <- getFreeVars' tm'
+    -- Libero un nuevo nombre para la variable y la función
+    -- además los abro en el término
+    (tm', funName, varName) <- cfreshen2 fn funTy x varTy tm 
+    -- Nombre fresco para la clausura
+    cloName <- cfreshenName fn
+    -- Nombre fresco para el fix            
+    fixName <- cfreshenName fn  
+    -- Obtengo los terminos que ya fueron liberados 
+    -- y tengo sus valores en la clausura.
+    bounds <- getFreeVars' tm
+    body <- closureConvert tm' -- LLamado recursivo
+
+    -- Lets para recuperar los valores de la clausura
     let bodyBoundingVars = foldr (\(i, (name, ty')) body'  ->
          IrLet name ty' (IrAccess (IrVar cloName) ty' i) body')
           body
           (zip [1..] (reverse bounds))
-    --let bodyBoundingVars = IrLet funName' IrClo (IrVar funName) bodyBoundingVars'
-    tell [IrFun cloName funTy [(cloName, IrClo),(varName, IrInt)] bodyBoundingVars]
-    -- trace ("-> En: " ++ fn ++ "\n\tvarName: " ++ varName ++ "\n\tCloName: " ++ cloName ++ "\n\t ListaBounds: " ++ (show bounds)) $ return ()
-    trace ("->"  ++ show bodyBoundingVars ++ "\n") $ return ()
-    return $ MkClosure cloName varLibres
+
+    -- Pateo la nueva función a top level
+    tell [IrFun funName funTy [(funName, IrClo),(varName, IrInt)] bodyBoundingVars]
+    return $ MkClosure funName varLibres
   Fix {} -> error "Fix: Tipo invalido"
   IfZ _ t1 t2 t3 -> do
     ir1 <- closureConvert t1
