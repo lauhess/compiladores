@@ -27,23 +27,26 @@ closureConvert t = case t of
   V _ (Free n) -> return $ IrVar n
   V _ (Global n) -> return $ IrGlobal n
   Const _ co@(CNat n) -> return $ IrConst co
-  Lam (_, FunTy _ ty) fn tyVar (Sc1 tm) -> do
-    let varTy = convertType tyVar 
-    (tm', varName) <- cfreshen fn varTy tm -- Libero un nuevo nombre
-    let varLibres = map IrVar (freeVars tm) -- Lista de valiables libres
-    cloName <- cfreshenName fn                 -- Nombre de la closure
-    funName <- cfreshenName fn                     -- Nombre de la función
-    bounds <- getFreeVars' tm               -- Bounds de la funcion
-    body <- closureConvert tm'
-    -- bounds' <- getFreeVars' tm'
-    let bodyBoundingVars = foldr (\(i, (name, ty')) body'  ->
-         IrLet name ty' (IrAccess (IrVar cloName) ty' i) body')
-          body
-          (zip [1..] (reverse bounds))
-    tell [IrFun funName (convertType ty) ((cloName, IrClo):(varName,varTy):bounds) bodyBoundingVars]
-    -- trace ("-> En: " ++ fn ++ "\n\tvarName: " ++ varName ++ "\n\tCloName: " ++ cloName ++ "\n\t ListaBounds: " ++ (show bounds)) $ return ()
-    trace ("->"  ++ show bodyBoundingVars ++ "\n") $ return ()
-    return $ MkClosure funName varLibres
+  -- Lam (_, FunTy _ ty) fn tyVar (Sc1 tm) -> do
+  t@(Lam i n ty body@(Sc1 b)) -> do
+    nombreFuncion <- varName "f"
+    nombreArg <- varName n
+    let body' = open nombreArg body -- se llama al argumento dentro de body donde antes había (Bound 0)
+    body'' <- closureConvert body'
+
+    let fv = freeVarsTy b
+
+    closure <- varName (nombreFuncion ++ "clos")
+
+    -- cuerpo va a tener las variables libres igualadas a alguna posición del entorno de la clausura
+    -- y finalmente body''
+    let cuerpo = args2vars fv body'' closure
+    let tipoRetorno = ty2IrTy ty
+
+    let decl = IrFun nombreFuncion tipoRetorno [(closure, IrClo), (nombreArg, IrInt)] cuerpo
+    tell [decl]
+
+    return $ MkClosure nombreFuncion $ map (IrVar . fst) fv
   Lam {} -> error "Lam: Tipo invalido"
   App (_,ty) t1 t2 -> do
     dummyName <- cfreshenName "App"
@@ -59,33 +62,23 @@ closureConvert t = case t of
     ir1 <- closureConvert t1
     ir2 <- closureConvert t2
     return $ IrBinaryOp op ir1 ir2
-  Fix (_, FunTy _ ty) fn ty1 x ty2 (Sc2 tm) -> do
-    -- Obtengo las variables libres del término 
-    let varLibres = map IrVar (freeVars tm) 
-    -- Tipos de la variable y la función
-    let varTy = convertType ty2
-        funTy = convertType ty1
-    -- Libero un nuevo nombre para la variable y la función
-    -- además los abro en el término
-    (tm', funName, varName) <- cfreshen2 fn funTy x varTy tm 
-    -- Nombre fresco para la clausura
-    cloName <- cfreshenName fn
-    -- Nombre fresco para el fix            
-    fixName <- cfreshenName fn  
-    -- Obtengo los terminos que ya fueron liberados 
-    -- y tengo sus valores en la clausura.
-    bounds <- getFreeVars' tm
-    body <- closureConvert tm' -- LLamado recursivo
+  -- Fix (_, FunTy _ ty) fn ty1 x ty2 (Sc2 tm) -> do
+  t@(Fix i fn fty vn vty body@(Sc2 b)) -> do
+    nombreFuncion <- varName ("fix_" ++ fn)
+    nombreArg <- varName vn
+    closure <- varName (nombreFuncion ++ "clos")
+    let body' = open2 closure nombreArg body
+    body'' <- closureConvert body'
 
-    -- Lets para recuperar los valores de la clausura
-    let bodyBoundingVars = foldr (\(i, (name, ty')) body'  ->
-         IrLet name ty' (IrAccess (IrVar cloName) ty' i) body')
-          body
-          (zip [1..] (reverse bounds))
+    let fv = freeVarsTy b
 
-    -- Pateo la nueva función a top level
-    tell [IrFun funName funTy [(funName, IrClo),(varName, IrInt)] bodyBoundingVars]
-    return $ MkClosure funName varLibres
+    let cuerpo = args2vars fv body'' closure
+    let tipoRetorno = ty2IrTy fty
+
+    let decl = IrFun nombreFuncion tipoRetorno [(closure, IrClo), (nombreArg, IrInt)] cuerpo
+    tell [decl]
+
+    return $ MkClosure nombreFuncion $ map (IrVar . fst) fv
   Fix {} -> error "Fix: Tipo invalido"
   IfZ _ t1 t2 t3 -> do
     ir1 <- closureConvert t1
@@ -145,3 +138,25 @@ getFreeVars' t = do
   (i, ns) <- get
   let libres = freeVars t
   return $ filter (\(n,_) -> n `elem` libres) ns
+
+varName :: Name -> CCState Name
+varName prefix = do
+    (n, ns) <- get
+    put (n+1, ns)
+    return (prefix ++ "_" ++  show n)
+
+args2vars :: [(Name, Ty)] -> Ir -> Name -> Ir
+args2vars fv t closure =
+    foldr   (\((v, ty), i) ir -> IrLet v (ty2IrTy ty) (IrAccess (IrVar closure) (ty2IrTy ty) i) ir)
+            t
+            (zip fv [1..])
+
+var2ir :: Var -> Ir
+var2ir (Free name) = IrVar name
+var2ir (Global name)  = IrGlobal name
+var2ir (Bound _) = undefined
+
+ty2IrTy :: Ty -> IrTy
+ty2IrTy NatTy = IrInt
+ty2IrTy (FunTy _ _) = IrFunTy
+
