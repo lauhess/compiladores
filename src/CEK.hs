@@ -5,7 +5,6 @@ import Global
 import MonadFD4 ( MonadFD4, lookupDecl, failFD4, modify, getProf, gets, printFD4 )
 import Eval (semOp)
 import Common (Pos(..))
-import Debug.Trace
 
 data Frame =
     AppEval CEKEnv TTerm
@@ -68,11 +67,10 @@ val2term (ClosFun vs n ty t) = let
     -- Todo: Refactorizar esto
     vs' = zip vs (reverse [1 .. (length vs)])
     c = foldl (\ term (caso, i) -> subst' i (val2term caso) (Sc1 term)) t vs'
-    r = Lam (NoPos, FunTy ty (getTy t)) n ty $ Sc1 c
-    in trace (show r) r
+    in Lam (NoPos, FunTy ty (getTy t)) n ty $ Sc1 c
 val2term (ClosFix vs n1 ty1 n2 ty2 t) = let
     vs' = zip vs (reverse [1 .. (length vs)])
-    c = foldl (\ term (caso, i) -> trace ("\t-Reemplazando " ++ show caso ++ " en " ++ show term ++ "\n") subst' i (val2term caso) (Sc1 term)) t vs'
+    c = foldl (\ term (caso, i) -> subst' i (val2term caso) (Sc1 term)) t vs'
     in Fix (NoPos, ty1) n1 ty1 n2 ty2 $ Sc2 c
 
 -- (fun (z:Nat) -> fun (x:Nat) -> fun (y:Nat) -> x+y+z) 1 2

@@ -42,7 +42,6 @@ import Bytecompile (bytecompileModule, bcWrite, bcRead, runBC, showBC)
 import Optimization (optimizeTerm)
 import C
 import ClosureConvert
-import Debug.Trace
 
 prompt :: String
 prompt = "FD4> "
@@ -194,7 +193,6 @@ ccCopileFile f = do
   printFD4 $  "Compilando " ++ f ++ " a C "
   let ir = runCC prog
       sourceC = ir2C ir
-  trace (show ir) $ return ()
   liftIO $ writeFile (changeExtension f "c") sourceC
 
 parseIO ::  MonadFD4 m => String -> P a -> String -> m a

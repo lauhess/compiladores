@@ -5,7 +5,6 @@ import Eval (semOp)
 import Subst
 import MonadFD4 (MonadFD4, lookupDecl, printFD4)
 import Data.Foldable (foldrM)
-import Debug.Trace
 import PPrint
 
 iterations :: Int
