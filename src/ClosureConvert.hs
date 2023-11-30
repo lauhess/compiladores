@@ -5,21 +5,10 @@ import IR
 import Control.Monad.Writer (Writer, MonadWriter (tell), runWriter)
 import MonadFD4
 import Subst
-import Debug.Trace
 
 type CCState a = StateT Int (Writer [IrDecl]) a
 
 type TyName = (IrTy, Name)
-
--- term2ir :: TTerm -> Ir
--- term2ir = undefined
-
--- convertType :: Ty -> IrTy
--- convertType = undefined
-
--- decl2irDecl :: Decl TTerm -> IrDecl
--- decl2irDecl (Decl _ name NatTy t) = IrVal name IrInt (term2ir t)
--- decl2irDecl (Decl _ name (FunTy declTy retTy) t) = IrFun name (head $ convertType retTy) (convertType declTy) (term2ir t)
 
 closureConvert :: TTerm -> CCState Ir
 closureConvert t = case t of
@@ -28,33 +17,30 @@ closureConvert t = case t of
   V _ (Global n) -> return $ IrGlobal n
   Const _ co@(CNat n) -> return $ IrConst co
   -- Lam (_, FunTy _ ty) fn tyVar (Sc1 tm) -> do
-  (Lam (_, FunTy _ ty) n _ body@(Sc1 b)) -> do
-    nombreFuncion <- varName "f"
-    nombreArg <- varName n
-    let body' = open nombreArg body -- se llama al argumento dentro de body donde antes había (Bound 0)
-    body'' <- closureConvert body'
+  (Lam (_, FunTy tyVar tyRet) n _ body@(Sc1 b)) -> do
+    nombreFuncion <- freeName "f"
+    nombreArg <- freeName n
+
+    body' <- closureConvert $ open nombreArg body
 
     let fv = freeVarsTy b
 
-    closure <- varName (nombreFuncion ++ "clos")
+    closure <- freeName (nombreFuncion ++ "clos")
 
-    -- cuerpo va a tener las variables libres igualadas a alguna posición del entorno de la clausura
-    -- y finalmente body''
-    let cuerpo = args2vars fv body'' closure
-    let tipoRetorno = convertType ty
+    let cuerpo        = args2vars fv body' closure
+        tipoRetorno   = convertType tyRet
+        tipoArgumento = convertType tyVar
 
-    let decl = IrFun nombreFuncion tipoRetorno [(closure, IrClo), (nombreArg, IrInt)] cuerpo
+    let decl = IrFun nombreFuncion tipoRetorno [(closure, IrClo), (nombreArg, tipoArgumento)] cuerpo
     tell [decl]
 
     return $ MkClosure nombreFuncion $ map (IrVar . fst) fv
   Lam {} -> error "Lam: Tipo invalido"
   App (_,ty) t1 t2 -> do
-    dummyName <- cfreshenName "App"
+    dummyName <- freeName "App"
     ir1 <- closureConvert t1
     ir2 <- closureConvert t2
-    -- trace ("===> " ++ dummyName ++ show ty) $ return ()
     return $ IrLet dummyName IrClo ir1 (IrCall (IrAccess (IrVar dummyName) IrFunTy 0) [IrVar dummyName,ir2] (convertType ty))
-    -- return $ IrCall ir1 [ir2] IrInt
   Print _ str tm -> do
       ir1 <- closureConvert tm
       return $ IrPrint str ir1
@@ -63,18 +49,17 @@ closureConvert t = case t of
     ir2 <- closureConvert t2
     return $ IrBinaryOp op ir1 ir2
   Fix (_, FunTy _ ty) fn fty vn vty body@(Sc2 b) -> do
-  -- (Fix (_,ty) fn fty vn vty body@(Sc2 b)) -> do
-    nombreFuncion <- varName ("fix_" ++ fn)
-    nombreArg <- varName vn
-    closure <- varName (nombreFuncion ++ "clos")
-    let body' = open2 closure nombreArg body
-    body'' <- closureConvert body'
+    nombreFuncion <- freeName ("fix_" ++ fn)
+    nombreArg <- freeName vn
+    closure <- freeName ("clos" ++ nombreFuncion)
+
+    body'' <- closureConvert $ open2 closure nombreArg body
 
     let fv = freeVarsTy b
+        cuerpo = args2vars fv body'' closure
+        tipoRetorno = convertType ty
+        decl = IrFun nombreFuncion tipoRetorno [(closure, IrClo), (nombreArg, IrInt)] cuerpo
 
-    let cuerpo = args2vars fv body'' closure
-    let tipoRetorno = convertType ty
-    let decl = IrFun nombreFuncion tipoRetorno [(closure, IrClo), (nombreArg, IrInt)] cuerpo
     tell [decl]
 
     return $ MkClosure nombreFuncion $ map (IrVar . fst) fv
@@ -84,39 +69,16 @@ closureConvert t = case t of
     ir2 <- closureConvert t2
     ir3 <- closureConvert t3
     return $ IrIfZ ir1 ir2 ir3
-  Let _ name ty t1 (Sc1 t2) -> do
-    ir1 <- closureConvert t1
-    (t2', name') <- cfreshen name (convertType ty) t2
-    ir2 <- closureConvert t2'
+  Let _ name ty t1 body@(Sc1 t2) -> do
+    ir1   <- closureConvert t1
+    name' <- freeName name
+    ir2   <- closureConvert $ open name' body
     return $ IrLet name' (convertType ty) ir1 ir2
-
-cfreshenName :: Name -> CCState Name
-cfreshenName name = do
-  i <- get
-  let newName = "_" ++ show i ++ name ++ "_"
-  put $ i + 1 
-  return newName
-
-cfreshen :: Name -> IrTy -> TTerm -> CCState (TTerm, Name)
-cfreshen name ty tm = do
-  i <- get
-  let newName = "_" ++ show i ++ name ++ "_"
-  put $ i + 1
-  return (open newName (Sc1 tm), newName)
-
-cfreshen2 :: Name -> IrTy -> Name -> IrTy -> TTerm -> CCState (TTerm, Name, Name)
-cfreshen2 n1 ty1 n2 ty2 tm = do
-  i <- get
-  let newName1 = "_" ++ show i ++ n1 ++ "_"
-      newName2 = "_" ++ show (i + 1) ++ n1 ++ "_"
-  put $ i + 2
-  return (open2 newName1 newName2 (Sc2 tm), newName1, newName2)
 
 runCC :: [Decl TTerm] -> IrDecls
 runCC m = let mon = runCC' m
           in IrDecls $ (snd . runWriter . runStateT mon) 0
 
--- closureConvertModule :: Module -> CCState
 runCC' :: Module -> CCState ()
 runCC' [Decl _ name ty t] = do
   r <- closureConvert t
@@ -132,14 +94,8 @@ convertType :: Ty -> IrTy
 convertType NatTy = IrInt
 convertType (FunTy _ _) = IrClo
 
--- getFreeVars' :: TTerm -> CCState [(Name, IrTy)]
--- getFreeVars' t = do
---   (i, ns) <- get
---   let libres = freeVars t
---   return $ filter (\(n,_) -> n `elem` libres) ns
-
-varName :: Name -> CCState Name
-varName prefix = do
+freeName :: Name -> CCState Name
+freeName prefix = do
     n <- get
     put $ n + 1
     return (prefix ++ "_" ++  show n)
