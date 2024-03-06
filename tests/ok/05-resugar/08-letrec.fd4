@@ -1,0 +1,1 @@
+let a : Nat = let rec f (x : Nat) : Nat = ifz x then 0 else f (x - 1) in f 10
