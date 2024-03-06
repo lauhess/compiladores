@@ -108,7 +108,7 @@ elabLet p env  False (v, vty') xs def body = do          -- Definicion funcion a
 elabLet p env  True (f, fty') [(x,xty)] def body = do    -- Ariedad 1
   fty <- elabSTy fty'
   elabXty <- elabSTy xty
-  body' <- elabClose x env body
+  body' <- elabClose f env body
   defClose2 <- elabClose2 f x env def
   let  def' = Fix p f (FunTy elabXty fty) x elabXty defClose2
   return $ Let p f (FunTy elabXty fty) def' body'
