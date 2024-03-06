@@ -137,7 +137,7 @@ binders = many1 (parens binding) <|> (binding >>= \x -> return [x])
 lam :: P STerm
 lam = do i <- getPos
          reserved "fun"
-         binds <- parens binders
+         binds <- binders
          reservedOp "->"
          t <- expr
          return (SLam i binds t)
