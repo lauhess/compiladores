@@ -17,6 +17,7 @@ import Global
 import MonadFD4
 import PPrint
 import Subst
+import Control.Monad
 
 
 -- | 'tc' chequea y devuelve el tipo de un término 
