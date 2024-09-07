@@ -86,16 +86,20 @@ tyatom :: P SType
 tyatom = (reserved "Nat" >> return SNatTy)
          <|> parens typeP
 
+tysvt :: P SType
+tysvt = (SVT <$> tyIdentifier) <|> parens typeP
+
 typeP' :: P SType
 typeP' = try (do
-          x <- tyatom
+          x <- tyatom <|> tysvt
           reservedOp "->"
           y <- typeP'
           return (SFunTy x y))
         <|> tyatom
+        <|> tysvt
 
 typeP :: P SType
-typeP = try typeP' <|> (tyIdentifier >>= (return . SVT))
+typeP = try typeP' 
 
 const :: P Const
 const = CNat <$> num
