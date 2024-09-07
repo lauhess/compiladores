@@ -23,7 +23,7 @@ import Data.Char ( isSpace )
 import Control.Exception ( catch , IOException )
 import System.IO ( hPrint, stderr, hPutStrLn )
 import Data.Maybe ( fromMaybe )
-
+import Control.Monad (when)
 import System.Exit ( exitWith, ExitCode(ExitFailure) )
 import Options.Applicative
 

@@ -31,6 +31,7 @@ import Subst
 import PPrint (pp)
 import Global (Statistics(..), GlEnv (statistics))
 import Optimization (optimizeTerm)
+import Control.Monad
 
 type Opcode = Int
 type Bytecode = [Int]
