@@ -31,9 +31,9 @@ import Global
 import Errors
 import Lang
 import Parse ( P, tm, program, declOrTm, runP )
-import Elab ( elab, elabDecl, decorar )
+import Elab ( elab, elabDecl )
 import Eval ( eval )
-import PPrint ( pp , ppTy, ppDecl )
+import PPrint ( pp , ppTy, ppDecl, openAll, colorear )
 import MonadFD4
 import TypeChecker ( tc, tcDecl )
 import CEK
@@ -42,7 +42,6 @@ import Bytecompile (bytecompileModule, bcWrite, bcRead, runBC, showBC)
 import Optimization (optimizeTerm)
 import C
 import ClosureConvert
-import Debug.Trace (traceM)
 import System.Console.Haskeline.Completion (completeFilename)
 
 defaultSettings :: MonadIO m => Settings m
@@ -214,8 +213,8 @@ evalDecl (Decl p x t e) = do
     return (Decl p x t e')
 
 handleDecl ::  MonadFD4 m => SDecl STerm -> m ()
-handleDecl d = traceM (show d ++ "\n") >> elabDecl d >>= \case
-  (Just d') -> traceM (show d' ++ "\n") >> handleDecl' d'
+handleDecl d = elabDecl d >>= \case
+  (Just d') -> handleDecl' d'
   Nothing   -> return ()
 
 handleDecl' ::  MonadFD4 m => Decl STerm -> m ()
@@ -223,9 +222,7 @@ handleDecl' d = do
         m <- getMode
         case m of
           Interactive -> do
-              printFD4 $ show d
               (Decl p x t tt) <- typecheckDecl d
-              --printFD4 $ show tt
               te <- eval tt
               addDecl (Decl p x t te)
           Typecheck -> do
@@ -399,19 +396,19 @@ printPhrase x =
     t  <- case x' of
            (SV p f) -> fromMaybe tex <$> lookupDecl f
            _       -> return tex
-    dt <- decorar t
-    printFD4 "STerm:"
+
+    gdecl <- gets glb
+    let dt = openAll fst (map declName gdecl) t
+    printFD4 $ colorear "STerm"
     printFD4 (show dt)
-    printFD4 "TTerm:"
+    printFD4 $ colorear "TTerm"
     printFD4 (show t)
 
 typeCheckPhrase :: MonadFD4 m => String -> m ()
 typeCheckPhrase x = do
          t <- parseIO "<interactive>" tm x
          t' <- elab t
-         --traceM (show t')
          s <- get
-         traceM (show (tyEnv s))
          tt <- tc t' (tyEnv s)
          let ty = getTy tt
          printFD4 (ppTy ty)

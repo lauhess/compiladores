@@ -15,7 +15,9 @@ module PPrint (
     ppTy,
     ppName,
     ppDecl,
-    freshen
+    freshen,
+    openAll,
+    colorear
     ) where
 
 import Lang
@@ -37,8 +39,9 @@ import Prettyprinter
       Pretty(pretty) )
 import MonadFD4 ( gets, MonadFD4 )
 import Global ( GlEnv(glb) )
-import Elab (decorar)
-import Debug.Trace (traceM)
+
+colorear :: String -> String
+colorear = render . opColor . pretty
 
 freshen :: [Name] -> Name -> Name
 freshen ns n = let cands = n : map (\i -> n ++ show i) [0..]
@@ -58,7 +61,13 @@ openAll gp ns (Const p c) = SConst (gp p) c
 openAll gp ns (Lam p x ty t) =
   let x' = freshen ns x
       ty' = unElabTy ty
-  in SLam (gp p) [(x', ty')] (openAll gp (x':ns) (open x' t))
+      t' = openAll gp (x':ns) (open x' t)
+      (xs, res) = case t' of
+        (SLam p' xs' res') -> if p' == gp p
+                            then (xs', res')
+                            else ([], t')
+        _ -> ([], t')
+  in SLam (gp p) ((x', ty'):xs) res
 openAll gp ns (App p t u) = SApp (gp p) (openAll gp ns t) (openAll gp ns u)
 openAll gp ns (Fix p f fty x xty t) =
   let
@@ -66,15 +75,26 @@ openAll gp ns (Fix p f fty x xty t) =
     f' = freshen (x':ns) f
     sfty = unElabTy fty
     sxty = unElabTy xty
-  in SFix (gp p) [(f', sfty), (x', sxty)] (openAll gp (x:f:ns) (open2 f' x' t))
+    t' = openAll gp (x':f':ns) (open2 f' x' t)
+    (xs, res) = case t' of
+        (SLam p' xs' res') -> if p' == gp p
+                            then (xs', res')
+                            else ([], t')
+        _ -> ([], t')
+  in SFix (gp p) ((f', sfty):(x', sxty):xs) res
 openAll gp ns (IfZ p c t e) = SIfZ (gp p) (openAll gp ns c) (openAll gp ns t) (openAll gp ns e)
 openAll gp ns (Print p str t) = SPrint (gp p) str (openAll gp ns t)
 openAll gp ns (BinaryOp p op t u) = SBinaryOp (gp p) op (openAll gp ns t) (openAll gp ns u)
+--decorar     (Let (p,_) v vty def body) = do
 openAll gp ns (Let p v ty m n) =
     let v'= freshen ns v
         def = openAll gp ns m
         body = openAll gp (v':ns) (open v' n)
-    in  SLet (gp p) False [(v', unElabTy ty)] def body
+        (xs, res, bool) = case def of
+          SLam p' xs' res' | p' == gp p -> (xs', res', False)
+          SFix p' (_:xs') res' | p' == gp p -> (xs', res', True)
+          _ -> ([], def, False)
+    in  SLet (gp p) bool [(v', unElabTy ty)] res body
 
 --Colores
 constColor :: Doc AnsiStyle -> Doc AnsiStyle
@@ -210,8 +230,6 @@ pp :: MonadFD4 m => TTerm -> m String
 {- pp = show -}
 pp t = do
        gdecl <- gets glb
-       dt <- decorar t
-       traceM $ show dt
        return (render . t2doc False $ openAll fst (map declName gdecl) t)
 
 render :: Doc AnsiStyle -> String

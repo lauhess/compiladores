@@ -200,12 +200,7 @@ makeType ((s,t):ts) vty = do
 {- re-sugar -}
 ---------------------
 
-
----------------------
-{- re-sugar -}
----------------------
-
-
+-- ToDo: Se podría borrar
 decorar :: MonadFD4 m => TTerm -> m STerm
 decorar (V (p,_) (Bound _)) = failFD4 "No se puede decorar un término con variables ligadas"
 decorar (V (p,_) (Free name)) = return $ SV p name
@@ -239,12 +234,8 @@ decorar (Let (p,_) v vty def body) = do
   def' <- decorar def
   body' <- decorar (open v body)
   let (xs, res, bool) = case def' of
-        (SLam p' xs' res') -> if p' == p 
-          then (xs', res', False) 
-          else ([], def', False)
-        (SFix p' (_:xs') res') -> if p' == p 
-          then (xs', res', True) 
-          else ([], def', False)
+        SLam p' xs' res' | p' == p -> (xs', res', False)
+        SFix p' (_:xs') res' | p' == p -> (xs', res', True)
         _ -> ([], def', False)
   return $ SLet p bool ((v,clearTy xs vty'):xs) res body'
   where clearTy [] t = t
