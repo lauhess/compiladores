@@ -15,12 +15,11 @@ module PPrint (
     ppTy,
     ppName,
     ppDecl,
-    unElabTy,
     freshen
     ) where
 
 import Lang
-import Subst ( open, open2 )
+import Subst ( open, open2, unElabTy )
 import Common ( Pos )
 
 import Data.Text ( unpack )
@@ -38,6 +37,8 @@ import Prettyprinter
       Pretty(pretty) )
 import MonadFD4 ( gets, MonadFD4 )
 import Global ( GlEnv(glb) )
+import Elab (decorar)
+import Debug.Trace (traceM)
 
 freshen :: [Name] -> Name -> Name
 freshen ns n = let cands = n : map (\i -> n ++ show i) [0..]
@@ -75,10 +76,6 @@ openAll gp ns (Let p v ty m n) =
         body = openAll gp (v':ns) (open v' n)
     in  SLet (gp p) False [(v', unElabTy ty)] def body
 
-unElabTy :: Ty -> SType
-unElabTy NatTy = SNatTy
-unElabTy (FunTy x y) = SFunTy (unElabTy x) (unElabTy y)
-
 --Colores
 constColor :: Doc AnsiStyle -> Doc AnsiStyle
 constColor = annotate (color Red)
@@ -104,9 +101,12 @@ ppName :: Name -> String
 ppName = id
 
 ty2doc :: Ty -> Doc AnsiStyle
-ty2doc NatTy     = typeColor (pretty "Nat")
-ty2doc (FunTy x@(FunTy _ _) y) = sep [parens (ty2doc x), typeOpColor (pretty "->"),ty2doc y]
-ty2doc (FunTy x y) = sep [ty2doc x, typeOpColor (pretty "->"),ty2doc y] 
+ty2doc (NatTy "")     = typeColor (pretty "Nat")
+ty2doc (NatTy  s)     = typeColor (pretty s)
+ty2doc (FunTy "" x@(FunTy _ _ _) y) = sep [parens (ty2doc x), typeOpColor (pretty "->"),ty2doc y]
+ty2doc (FunTy souter x@(FunTy _ _ _) y) = sep [parens (typeColor (pretty souter)), typeOpColor (pretty "->"),ty2doc y]
+ty2doc (FunTy "" x y) = sep [ty2doc x, typeOpColor (pretty "->"),ty2doc y]
+ty2doc (FunTy s x y) = sep [typeColor (pretty s)]
 
 -- | Pretty printer para tipos (Doc)
 sty2doc :: SType -> Doc AnsiStyle
@@ -156,7 +156,7 @@ t2doc at (SLam _ xs t) =
   parenIf at $
   sep [sep ([ keywordColor (pretty "fun") ] ++
            map binding2doc xs  ++
-           [opColor(pretty "->")])
+           [opColor (pretty "->")])
       , nest 2 (t2doc False t)]
 
 t2doc at t@(SApp _ _ _) =
@@ -198,7 +198,7 @@ t2doc at (SBinaryOp _ o a b) =
   parenIf at $
   t2doc True a <+> binary2doc o <+> t2doc True b
 
-t2doc _ _ = undefined 
+t2doc _ _ = undefined
 
 binding2doc :: (Name, SType) -> Doc AnsiStyle
 binding2doc (x, ty) =
@@ -210,6 +210,8 @@ pp :: MonadFD4 m => TTerm -> m String
 {- pp = show -}
 pp t = do
        gdecl <- gets glb
+       dt <- decorar t
+       traceM $ show dt
        return (render . t2doc False $ openAll fst (map declName gdecl) t)
 
 render :: Doc AnsiStyle -> String

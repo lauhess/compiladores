@@ -60,14 +60,14 @@ destroy var kont = incTranCount >> go var kont
         go v [] = return v
         go v ks = failFD4 $ "Destroy: valor no contemplado \n\t" ++ show v ++ "\n\t" ++ show (head ks)
 
--- ToDo: Agregar informa con de nombre
+-- ToDo: Agregar información de nombre
 val2term :: Val -> TTerm
-val2term (Vall n) = Const (NoPos, NatTy) (CNat n)
+val2term (Vall n) = Const (NoPos, NatTy "") (CNat n)
 val2term (ClosFun vs n ty t) = let
     -- Todo: Refactorizar esto
     vs' = zip vs (reverse [1 .. (length vs)])
     c = foldl (\ term (caso, i) -> subst' i (val2term caso) (Sc1 term)) t vs'
-    in Lam (NoPos, FunTy ty (getTy t)) n ty $ Sc1 c
+    in Lam (NoPos, FunTy "" ty (getTy t)) n ty $ Sc1 c
 val2term (ClosFix vs n1 ty1 n2 ty2 t) = let
     vs' = zip vs (reverse [1 .. (length vs)])
     c = foldl (\ term (caso, i) -> subst' i (val2term caso) (Sc1 term)) t vs'

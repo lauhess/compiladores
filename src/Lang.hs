@@ -54,9 +54,16 @@ data STy var =
 
 -- | AST de Tipos
 data Ty =
-      NatTy
-    | FunTy Ty Ty
-    deriving (Show,Eq)
+      NatTy Name
+    | FunTy Name Ty Ty
+    deriving Show
+
+-- | Igualdad de tipos para type checker
+instance Eq Ty where
+    NatTy _ == NatTy _ = True
+    FunTy _ dom cod == FunTy _ dom' cod' = 
+        dom == dom' && cod == cod'
+    _ == _ = False
 
 type Name = String
 

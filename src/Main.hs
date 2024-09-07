@@ -13,7 +13,7 @@ Stability   : experimental
 
 module Main where
 
-import System.Console.Haskeline ( defaultSettings, getInputLine, runInputT, InputT )
+import System.Console.Haskeline (getInputLine, runInputT, InputT, Settings (..) )
 import Control.Monad.Catch (MonadMask)
 
 --import Control.Monad
@@ -31,7 +31,7 @@ import Global
 import Errors
 import Lang
 import Parse ( P, tm, program, declOrTm, runP )
-import Elab ( elab, elabDecl )
+import Elab ( elab, elabDecl, decorar )
 import Eval ( eval )
 import PPrint ( pp , ppTy, ppDecl )
 import MonadFD4
@@ -42,6 +42,14 @@ import Bytecompile (bytecompileModule, bcWrite, bcRead, runBC, showBC)
 import Optimization (optimizeTerm)
 import C
 import ClosureConvert
+import Debug.Trace (traceM)
+import System.Console.Haskeline.Completion (completeFilename)
+
+defaultSettings :: MonadIO m => Settings m
+defaultSettings = Settings
+      { complete = completeFilename
+      , historyFile = Just ".fd4_history"
+      , autoAddHistory = True }
 
 prompt :: String
 prompt = "FD4> "
@@ -206,8 +214,8 @@ evalDecl (Decl p x t e) = do
     return (Decl p x t e')
 
 handleDecl ::  MonadFD4 m => SDecl STerm -> m ()
-handleDecl d = elabDecl d >>= \case
-  (Just d') -> handleDecl' d'
+handleDecl d = traceM (show d ++ "\n") >> elabDecl d >>= \case
+  (Just d') -> traceM (show d' ++ "\n") >> handleDecl' d'
   Nothing   -> return ()
 
 handleDecl' ::  MonadFD4 m => Decl STerm -> m ()
@@ -217,7 +225,7 @@ handleDecl' d = do
           Interactive -> do
               printFD4 $ show d
               (Decl p x t tt) <- typecheckDecl d
-              printFD4 $ show tt
+              --printFD4 $ show tt
               te <- eval tt
               addDecl (Decl p x t te)
           Typecheck -> do
@@ -391,8 +399,9 @@ printPhrase x =
     t  <- case x' of
            (SV p f) -> fromMaybe tex <$> lookupDecl f
            _       -> return tex
+    dt <- decorar t
     printFD4 "STerm:"
-    printFD4 (show x')
+    printFD4 (show dt)
     printFD4 "TTerm:"
     printFD4 (show t)
 
@@ -400,7 +409,9 @@ typeCheckPhrase :: MonadFD4 m => String -> m ()
 typeCheckPhrase x = do
          t <- parseIO "<interactive>" tm x
          t' <- elab t
+         --traceM (show t')
          s <- get
+         traceM (show (tyEnv s))
          tt <- tc t' (tyEnv s)
          let ty = getTy tt
          printFD4 (ppTy ty)

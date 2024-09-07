@@ -17,6 +17,7 @@ module Subst where
 
 import Lang
 import Common
+import MonadFD4 (MonadFD4)
 
 -- Esta es una función auxiliar que usan el resto de las funciones de este módulo
 -- para modificar las vsriables (ligadas y libres) de un término
@@ -108,3 +109,12 @@ boundUse t = go 0 t where
   go n (Print p str t) = go n t
   go n (BinaryOp p op t u) = go n t || go n u
   go n (Let p v vty m (Sc1 o)) = go (n+1) o
+
+unElabTy :: Ty -> SType
+unElabTy (NatTy "") = SNatTy
+unElabTy (NatTy s) = SVT s
+unElabTy (FunTy "" t1 t2) = SFunTy (unElabTy t1) (unElabTy t2)
+unElabTy (FunTy s t1 t2) = SVT s
+
+unElabTyM :: MonadFD4 m => Ty -> m SType
+unElabTyM t = return $ unElabTy t

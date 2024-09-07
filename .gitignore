@@ -1,3 +1,5 @@
 *.hi
 *.o
 dist-newstyle/*
+
+.fd4_history

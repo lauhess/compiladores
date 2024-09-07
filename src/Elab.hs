@@ -16,7 +16,6 @@ import Lang
 import Subst
 import MonadFD4 (lookupTyS, addTyS, MonadFD4, lookupTyS, failFD4)
 import Common (Pos)
-import Debug.Trace (trace)
 
 -- | 'elab' transforma variables ligadas en índices de de Bruijn
 -- en un término dado. 
@@ -94,7 +93,7 @@ elabLet p env  False (v, vty) [(x,xty)] def body = do   -- Definicion funcion ar
   defElab <- elab' env (SLam p [(x,xty)] def)
   xType <- elabSTy xty
   bodyElab <- elabClose v env body
-  return $ Let p v (FunTy xType vType) defElab bodyElab
+  return $ Let p v (FunTy "" xType vType) defElab bodyElab
 elabLet p env  False (v, vty') xs def body = do          -- Definicion funcion ariedad n
   vty <- elabSTy vty'
   fty <- makeType xs vty
@@ -111,8 +110,8 @@ elabLet p env  True (f, fty') [(x,xty)] def body = do    -- Ariedad 1
   elabXty <- elabSTy xty
   body' <- elabClose f env body
   defClose2 <- elabClose2 f x env def
-  let  def' = Fix p f (FunTy elabXty fty) x elabXty defClose2
-  return $ Let p f (FunTy elabXty fty) def' body'
+  let  def' = Fix p f (FunTy "" elabXty fty) x elabXty defClose2
+  return $ Let p f (FunTy "" elabXty fty) def' body'
 elabLet p env  True (f, fty) ((x,xty):xs) def body = do           -- Ariedad n
   let fty' = makeSType xs fty
   let fun = SLam p xs def
@@ -133,11 +132,11 @@ elabLet _ _ _ _ _ _ _ = undefined
 ---------------------
 
 elabSTy :: MonadFD4 m => SType -> m Ty
-elabSTy SNatTy = return NatTy
+elabSTy SNatTy = return $ NatTy ""
 elabSTy (SFunTy t1 t2) = do
   ft1 <- elabSTy t1
   ft2 <- elabSTy t2
-  return $ FunTy ft1 ft2
+  return $ FunTy "" ft1 ft2
 elabSTy (SVT v) = do
   ty <- lookupTyS v
   case ty of
@@ -158,7 +157,7 @@ elabDecl (SDecl pos False ((x, xty):xs) def) = do       -- funcion ariedad multi
 elabDecl (SDecl pos True [(x, xty), (y, yty)] def) = do -- Fix ariedad simple
   xty' <- elabSTy xty
   yty' <- elabSTy yty
-  return $ Just $ Decl pos x (FunTy yty' xty') (SFix pos [(x, SFunTy yty xty), (y, yty)] def)
+  return $ Just $ Decl pos x (FunTy "" yty' xty') (SFix pos [(x, SFunTy yty xty), (y, yty)] def)
 elabDecl (SDecl pos True (fun:x:xs) def) = do           -- Fix ariedad multiple
   let fty' = makeSType xs (snd fun)
   let def' = SLam pos xs def
@@ -172,8 +171,12 @@ elabDecl (SDecl pos True (fun:x:xs) def) = do           -- Fix ariedad multiple
       in SFunTy t ts'
 elabDecl (SDeclTy pos s sty) = do                       -- Nueva declaracion de sinonimo de tipo
   t <- elabSTy sty
-  addTyS s t
+  let t' = addName t
+  addTyS s t'
   return Nothing
+  where addName :: Ty -> Ty
+        addName (FunTy _ t1 t2) = FunTy s t1 t2
+        addName (NatTy _) = NatTy s
 elabDecl _ = undefined
 
 elabClose :: MonadFD4 m => Name -> [Name] -> STerm -> m (Scope Pos Var)
@@ -188,21 +191,14 @@ elabClose2 x y env term = do
 
 makeType ::  MonadFD4 m => [(Name, SType)] -> Ty -> m Ty
 makeType [] vty = return vty
-makeType ((_,t):ts) vty = do
+makeType ((s,t):ts) vty = do
   ts' <- makeType ts vty
   t'  <- elabSTy t
-  return $ FunTy  t' ts'
+  return $ FunTy s t' ts'
 
 ---------------------
 {- re-sugar -}
 ---------------------
-
-decorarTy :: MonadFD4 m => Ty -> m SType
-decorarTy NatTy = return SNatTy
-decorarTy (FunTy t1 t2) = do
-  t1' <- decorarTy t1
-  t2' <- decorarTy t2
-  return $ SFunTy t1' t2'
 
 
 ---------------------
@@ -216,7 +212,7 @@ decorar (V (p,_) (Free name)) = return $ SV p name
 decorar (V (p,_) (Global name)) = return $ SV p name
 decorar (Const (p,_) c) = return $ SConst p c
 decorar (Lam (p,_) v vty t) = do
-  vty' <- decorarTy vty
+  vty' <- unElabTyM vty
   t' <- decorar (open v t)
   let (xs, res) = case t' of
         (SLam p' xs' res') -> if p' == p then (xs', res') else ([], t')
@@ -239,7 +235,7 @@ decorar (Print (p,_) str t) = do
   t' <- decorar t
   return $ SPrint p str t'
 decorar (Let (p,_) v vty def body) = do
-  vty' <- decorarTy vty
+  vty' <- unElabTyM vty
   def' <- decorar def
   body' <- decorar (open v body)
   let (xs, res, bool) = case def' of
@@ -255,8 +251,8 @@ decorar (Let (p,_) v vty def body) = do
         clearTy (_:xs) (SFunTy _ t) = clearTy xs t
         clearTy _ _ = undefined
 decorar (Fix (p,_) f fty x xty t) = do
-  fty' <- decorarTy fty
-  xty' <- decorarTy xty
+  fty' <- unElabTyM fty
+  xty' <- unElabTyM xty
   t' <- decorar (open2 f x t)
   let (xs, res) = case t' of
         (SLam p' xs' res') -> if p' == p then (xs', res') else ([], t')

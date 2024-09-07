@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+{-# HLINT ignore "Use record patterns" #-}
 module ClosureConvert where
 
 import Lang
@@ -17,7 +19,7 @@ closureConvert t = case t of
   V _ (Global n) -> return $ IrGlobal n
   Const _ co@(CNat n) -> return $ IrConst co
   -- Lam (_, FunTy _ ty) fn tyVar (Sc1 tm) -> do
-  (Lam (_, FunTy tyVar tyRet) n _ body@(Sc1 b)) -> do
+  (Lam (_, FunTy _ tyVar tyRet) n _ body@(Sc1 b)) -> do -- ToDo: Revisar primer param FunTy
     nombreFuncion <- freeName "f"
     nombreArg <- freeName n
 
@@ -48,7 +50,7 @@ closureConvert t = case t of
     ir1 <- closureConvert t1
     ir2 <- closureConvert t2
     return $ IrBinaryOp op ir1 ir2
-  Fix (_, FunTy _ ty) fn fty vn vty body@(Sc2 b) -> do
+  Fix (_, FunTy _ _ ty) fn fty vn vty body@(Sc2 b) -> do -- ToDo: Revisar primer param FunTy
     nombreFuncion <- freeName ("fix_" ++ fn)
     nombreArg <- freeName vn
     closure <- freeName ("clos" ++ nombreFuncion)
@@ -91,8 +93,8 @@ runCC'((Decl _ name ty t):ms) = do
 runCC' _ = error "No se puede convertir"
 
 convertType :: Ty -> IrTy
-convertType NatTy = IrInt
-convertType (FunTy _ _) = IrClo
+convertType (NatTy _) = IrInt
+convertType (FunTy _ _ _) = IrClo
 
 freeName :: Name -> CCState Name
 freeName prefix = do

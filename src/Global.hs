@@ -9,7 +9,7 @@ Stability   : experimental
 -}
 module Global where
 
-import Lang
+import Lang ( TTerm, Decl(Decl), Name, Ty, getTy )
 
 data GlEnv = GlEnv {
   inter :: Bool,        --  ^ True, si estamos en modo interactivo.
@@ -37,7 +37,7 @@ data Statistics = StatsBytecode {
 
 -- ^ Entorno de tipado de declaraciones globales
 tyEnv :: GlEnv ->  [(Name,Ty)]
-tyEnv g = map (\(Decl _ n t b) -> (n, getTy b))  (glb g)
+tyEnv g = map (\(Decl _ n t b) -> (n, t))  (glb g)
 
 {-
  Tipo para representar las banderas disponibles en línea de comando.
