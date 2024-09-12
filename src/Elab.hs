@@ -16,6 +16,7 @@ import Lang
 import Subst
 import MonadFD4 (lookupTyS, addTyS, MonadFD4, lookupTyS, failFD4)
 import Common (Pos)
+import Debug.Trace
 
 -- | 'elab' transforma variables ligadas en índices de de Bruijn
 -- en un término dado. 
@@ -153,6 +154,7 @@ elabDecl (SDecl pos False [(x, xty)] def) =             -- Definicion original
 elabDecl (SDecl pos False ((x, xty):xs) def) = do       -- funcion ariedad multiple
   t' <- elabSTy xty
   t <- makeType xs t'
+  traceM $ show t
   return $ Just $ Decl pos x t $ SLam pos xs def
 elabDecl (SDecl pos True [(x, xty), (y, yty)] def) = do -- Fix ariedad simple
   xty' <- elabSTy xty
@@ -194,7 +196,7 @@ makeType [] vty = return vty
 makeType ((s,t):ts) vty = do
   ts' <- makeType ts vty
   t'  <- elabSTy t
-  return $ FunTy s t' ts'
+  return $ FunTy "" t' ts'
 
 ---------------------
 {- re-sugar -}
