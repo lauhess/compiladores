@@ -80,7 +80,7 @@ deadCodeElimination t = case t of
                                  deadCodeElimination t2 >>= \t2' ->
                                  return $ Let i s ty t1' (Sc1 t2')
                             else return $ reBound t2
-                            where reBound = varChanger (\_ p n -> V p (Free n)) (\d p ix -> if ix > d then V p (Bound (ix - 1)) else V p (Bound ix))
+                            where reBound = varChanger 0 (\_ p n -> V p (Free n)) (\d p ix -> if ix > d then V p (Bound (ix - 1)) else V p (Bound ix))
 
 
 constantFolding :: MonadFD4 m => TTerm -> m TTerm

@@ -242,7 +242,6 @@ handleDecl' d = do
               ed <- evalDecl td
               addDecl ed
           InteractiveCEK -> do
-            printFD4 "Evaluando interactivamente CEK"
             (Decl p x t tt) <- typecheckDecl d
             v <- seek tt
             let tt' = val2term v
@@ -250,14 +249,12 @@ handleDecl' d = do
             ppterm <- ppDecl decl'
             addDecl $ Decl p x t $ val2term v
           EvalCEK -> do
-            printFD4 "Evaluando sobre Máquina CEK"
             (Decl p x t tt) <- typecheckDecl d
             v <- seek tt
             let tt' = val2term v
             let decl' = Decl p x t tt'
             ppterm <- ppDecl decl'
             addDecl $ Decl p x t $ val2term v
-            printFD4 $ show  tt
             profEnabled <- getProf
             when profEnabled (do
               s <- gets statistics
@@ -379,7 +376,7 @@ handleTerm t = do
          tt <- tc t' (tyEnv s)
          case m of
           InteractiveCEK -> do
-            printFD4 "Evaluando sobre Máquina CEK"
+            -- printFD4 "Evaluando sobre Máquina CEK"
             v <- seek tt
             let te = val2term v
             ppte <- pp te

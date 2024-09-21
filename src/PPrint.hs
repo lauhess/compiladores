@@ -133,7 +133,7 @@ sty2doc :: SType -> Doc AnsiStyle
 sty2doc SNatTy     = typeColor (pretty "Nat")
 sty2doc (SFunTy x@(SFunTy _ _) y) = sep [parens (sty2doc x), typeOpColor (pretty "->"), sty2doc y]
 sty2doc (SFunTy x y) = sep [sty2doc x, typeOpColor (pretty "->"), sty2doc y]
-sty2doc (SVT v) = pretty v
+sty2doc (SVT v) = typeColor $ pretty v
 
 -- | Pretty printer para tipos (String)
 ppTy :: Ty -> String

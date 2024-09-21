@@ -5,6 +5,7 @@ import Global
 import MonadFD4 ( MonadFD4, lookupDecl, failFD4, modify, getProf, gets, printFD4 )
 import Eval (semOp)
 import Common (Pos(..))
+import Subst (varChanger)
 
 data Frame =
     AppEval CEKEnv TTerm
@@ -25,6 +26,8 @@ data Val =
 
 type CEKEnv = [Val]
 
+
+-- Agregá un marco a la continuación y descendiendo por el término a ejecutar
 seek    :: MonadFD4 m => TTerm -> m Val
 seek term = inicializarStats >> seek' term [] []
 
@@ -44,6 +47,7 @@ seek' term p k = incTranCount >> case term of
     (Fix _ n1 ty1 n2 ty2 (Sc2 t)) -> destroy (ClosFix p n1 ty1 n2 ty2 t) k
     (Let info n ty s (Sc1 t))   -> seek' (App info (Lam info n ty (Sc1 t)) s) p k
 
+-- Da valor a una continuación << >>
 destroy :: MonadFD4 m => Val          -> Kont -> m Val
 destroy var kont = incTranCount >> go var kont
     where
@@ -60,43 +64,21 @@ destroy var kont = incTranCount >> go var kont
         go v [] = return v
         go v ks = failFD4 $ "Destroy: valor no contemplado \n\t" ++ show v ++ "\n\t" ++ show (head ks)
 
--- ToDo: Agregar información de nombre
 val2term :: Val -> TTerm
-val2term (Vall n) = Const (NoPos, NatTy "") (CNat n)
-val2term (ClosFun vs n ty t) = let
-    -- Todo: Refactorizar esto
-    vs' = zip vs (reverse [1 .. (length vs)])
-    c = foldl (\ term (caso, i) -> subst' i (val2term caso) (Sc1 term)) t vs'
+val2term val = case val of
+  Vall n -> Const (NoPos, NatTy "") (CNat n)
+  ClosFun vs n ty t -> 
+    let c = go vs (length vs) t
     in Lam (NoPos, FunTy "" ty (getTy t)) n ty $ Sc1 c
-val2term (ClosFix vs n1 ty1 n2 ty2 t) = let
-    vs' = zip vs (reverse [1 .. (length vs)])
-    c = foldl (\ term (caso, i) -> subst' i (val2term caso) (Sc1 term)) t vs'
+  ClosFix vs n1 ty1 n2 ty2 t -> 
+    let c = go vs (length vs) t
     in Fix (NoPos, ty1) n1 ty1 n2 ty2 $ Sc2 c
-
--- (fun (z:Nat) -> fun (x:Nat) -> fun (y:Nat) -> x+y+z) 1 2
--- (fun (w:Nat) -> fun (z:Nat) -> fun (x:Nat) -> fun (y:Nat) -> x+y+w+z) 8 9
-
--- Esta es una función auxiliar que usan el resto de las funciones de este módulo
--- para modificar las vsriables (ligadas y libres) de un término
-varChanger' :: Int
-           -> (Int -> info -> Name -> Tm info Var) --que hacemos con las variables localmente libres
-           -> (Int -> info -> Int ->  Tm info Var) --que hacemos con los indices de De Bruijn
-           -> Tm info Var -> Tm info Var
-varChanger' n' local bound t' = go n' t' where
-  go n   (V p (Bound i)) = bound n p i
-  go n   (V p (Free x)) = local n p x
-  go n   (V p (Global x)) = V p (Global x)
-  go n (Lam p y ty (Sc1 t))   = Lam p y ty (Sc1 (go (n+1) t))
-  go n (App p l r)   = App p (go n l) (go n r)
-  go n (Fix p f fty x xty (Sc2 t)) = Fix p f fty x xty (Sc2 (go (n+2) t))
-  go n (IfZ p c t e) = IfZ p (go n c) (go n t) (go n e)
-  go n t@(Const _ _) = t
-  go n (Print p str t) = Print p str (go n t)
-  go n (BinaryOp p op t u) = BinaryOp p op (go n t) (go n u)
-  go n (Let p v vty m (Sc1 o)) = Let p v vty (go n m) (Sc1 (go (n+1) o))
+  where
+    go [] _ term = term
+    go (v:vs') m term = go vs' (m - 1) (subst' m (val2term v) (Sc1 term))
 
 subst' :: Int -> Tm info Var -> Scope info Var -> Tm info Var
-subst' k n (Sc1 m) = varChanger' k (\_ p n' -> V p (Free n')) bnd m
+subst' k n (Sc1 m) = varChanger k (\_ p n' -> V p (Free n')) bnd m
    where bnd depth p i
              | i == depth = n
              | otherwise  = V p (Bound i)
