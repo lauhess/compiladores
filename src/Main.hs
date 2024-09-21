@@ -43,6 +43,7 @@ import Optimization (optimizeTerm)
 import C
 import ClosureConvert
 import System.Console.Haskeline.Completion (completeFilename)
+import Debug.Trace (traceM)
 
 defaultSettings :: MonadIO m => Settings m
 defaultSettings = Settings
@@ -72,14 +73,16 @@ parseMode = (,,,) <$>
    -- reemplazar por la siguiente línea para habilitar opción
       <*> flag False True (long "optimize" <> short 'o' <> help "Optimizar código")
       <*> flag False True (long "profile" <> short 'p' <> help "Activar profiling")
-      <*> flag False True (long "cek" <> short 'k' <> help "Optimizar código")
+      <*> flag False True (long "cek" <> short 'k' <> help "Activar evaluación con máquina CEK")
 
 -- | Parser de opciones general, consiste de un modo y una lista de archivos a procesar
 parseArgs :: Parser (Mode, Bool, Bool, Bool, [FilePath])
 parseArgs = (\(a, opt, prof, cek) c -> (a, opt, prof, cek, c)) <$> parseMode <*> many (argument str (metavar "FILES..."))
 
 main :: IO ()
-main = execParser opts >>= \x@(a,b,c,d,_) -> putStrLn ("Options: " ++ show a ++ show b ++ show c ++ show d) >> go x
+main = execParser opts >>= \x@(a,b,c,d,_) -> 
+  -- putStrLn ("Options: " ++ show a ++ show b ++ show c ++ show d) >> 
+  go x
   where
     opts = info (parseArgs <**> helper)
       ( fullDesc
@@ -240,6 +243,7 @@ handleDecl' d = do
               ed <- evalDecl td
               addDecl ed
           InteractiveCEK -> do
+            printFD4 "Evaluando interactivamente CEK"
             (Decl p x t tt) <- typecheckDecl d
             v <- seek tt
             let tt' = val2term v

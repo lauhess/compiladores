@@ -1,15 +1,3 @@
-let f : Nat -> Nat = fun (x:Nat) -> x+1
+let (f:Nat->Nat) = fun (x:Nat) -> x+1
 
-let res1 : Nat = print "res = " (f 100)
-
-let g (x  : Nat) (y : Nat) : Nat = x + y
-
-let res2 : Nat = print "res = " (g 100 200)
-
-let h (x  : Nat) (y : Nat)  (z : Nat) : Nat = z - x + y
-
-let res3 : Nat = print "res = " (h 100 200 10)
-
-let i (x  : Nat) (y : Nat)  (z : Nat) (w : Nat): Nat = z - x + w - y
-
-let res4 : Nat = print "res = " (i 100 200 10 300)
+let (res:Nat) = print "res = " (f 100)
