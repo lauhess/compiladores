@@ -16,7 +16,6 @@ import Lang
 import Subst
 import MonadFD4 (lookupTyS, addTyS, MonadFD4, lookupTyS, failFD4)
 import Common (Pos)
-import Debug.Trace
 
 -- | 'elab' transforma variables ligadas en índices de de Bruijn
 -- en un término dado. 
@@ -73,8 +72,17 @@ elab' env (SFix info (fun:x:xs) body) = do
   ftyElab <- elabSTy $ snd fun
   xtyElab <- elabSTy $ snd x
   return $ Fix info (fst fun) ftyElab (fst x) xtyElab bElab
+-- Casos imposibles
+elab' env (SLam p [] t) = 
+  -- Debería ser imposible gracias al parser
+  failFD4 "Las funciones anónimas deben tomar al menos 1 argumento" 
+elab' env (SFix info [] _) = 
+  -- Debería ser imposible gracias al parser 
+  failFD4 "SFix with empty list is not allowed"
+elab' env (SFix info [(_, _)] _) = 
+  failFD4 "SFix with single element list is not allowed"
 
-elab' _ _ = undefined
+-- elab' _ _ = undefined
   -- elabLet p recursive (head bs) (tail def) def body
   -- case (recursive, bs) of 
   --   (False, [(v, vty)]) -> Let p v vty (elab' env def) (close v (elab' (v:env) body))
@@ -154,7 +162,6 @@ elabDecl (SDecl pos False [(x, xty)] def) =             -- Definicion original
 elabDecl (SDecl pos False ((x, xty):xs) def) = do       -- funcion ariedad multiple
   t' <- elabSTy xty
   t <- makeType xs t'
-  traceM $ show t
   return $ Just $ Decl pos x t $ SLam pos xs def
 elabDecl (SDecl pos True [(x, xty), (y, yty)] def) = do -- Fix ariedad simple
   xty' <- elabSTy xty
@@ -179,8 +186,16 @@ elabDecl (SDeclTy pos s sty) = do                       -- Nueva declaracion de 
   where addName :: Ty -> Ty
         addName (FunTy _ t1 t2) = FunTy s t1 t2
         addName (NatTy _) = NatTy s
-elabDecl _ = undefined
+elabDecl (SDecl _ False [] _) = 
+  failFD4 "Empty non-recursive declaration is not allowed"
+elabDecl (SDecl _ True [] _) = 
+  failFD4 "Empty recursive declaration is not allowed"
+elabDecl (SDecl _ True [(_, _)] _) = 
+  failFD4 "Recursive declaration with single element is not allowed"
+-- ToDo: Revisar este caso let rec (fact : Nat -> Nat) =  fun (x:Nat) -> ifz x then 1 else fact (x-1)
 
+-- elabDecl s = failFD4 $ "No se pudo elaborar la declaración " ++ show s
+-- fix (f : τ) (x : τ) . t
 elabClose :: MonadFD4 m => Name -> [Name] -> STerm -> m (Scope Pos Var)
 elabClose x env term = do
   t <- elab' (x:env) term

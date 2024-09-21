@@ -43,7 +43,6 @@ import Optimization (optimizeTerm)
 import C
 import ClosureConvert
 import System.Console.Haskeline.Completion (completeFilename)
-import Debug.Trace (traceM)
 
 defaultSettings :: MonadIO m => Settings m
 defaultSettings = Settings

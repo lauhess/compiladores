@@ -9,7 +9,7 @@ Stability   : experimental
 -}
 module Global where
 
-import Lang ( TTerm, Decl(Decl), Name, Ty, getTy )
+import Lang ( TTerm, Decl(Decl), Name, Ty )
 
 data GlEnv = GlEnv {
   inter :: Bool,        --  ^ True, si estamos en modo interactivo.
