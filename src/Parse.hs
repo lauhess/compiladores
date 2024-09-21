@@ -135,9 +135,30 @@ binding = do v <- var
              ty <- typeP
              return (v, ty)
 
-binders :: P [(Name, SType)]
-binders = many1 (parens binding) <|> (binding >>= \x -> return [x])
+multibinding :: P [(Name, SType)]
+multibinding = do 
+  vs <- many1 var 
+  reservedOp ":"
+  ty <- typeP
+  return [(v, ty) | v <- vs]
 
+-- multibind 
+-- -- x y : Nat 
+-- parens multibind 
+-- -- (x y : Nat)
+-- many1 multibind
+-- -- (x y : Nat) (z : Nat)
+many1MultiBinding :: P [(Name, SType)]
+many1MultiBinding = do 
+  xs <- many1 (parens multibinding)
+  return $ concat xs
+
+-- (x y : Nat) (z : Nat)
+binders :: P [(Name, SType)]
+binders =  many1MultiBinding
+  <|> (binding >>= \x -> return [x])
+  
+-- (x:Nat y:Nat z:Nat) -> (x y z : Nat)
 lam :: P STerm
 lam = do i <- getPos
          reserved "fun"
