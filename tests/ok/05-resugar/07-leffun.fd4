@@ -1,2 +1,0 @@
-let p : Nat = let f (x:Nat) (y:Nat) : Nat = x + y in f 1 2
-# let p : Nat = let f : Nat -> Nat -> Nat = fun (x:Nat) (y:Nat) -> x + y in f 1 2

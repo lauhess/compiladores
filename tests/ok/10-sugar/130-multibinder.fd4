@@ -1,6 +1,0 @@
-let g (x : Nat) : Nat = x + 1
-let h (x : Nat) : Nat = x + 2
-
-let f (g h : Nat -> Nat) (x : Nat) : Nat = g (h x)
-
-let (res : Nat) = print "res = " (f g h 100)

@@ -1,3 +1,0 @@
-let example : Nat = let a : Nat = 1 in a + 1
-
-let p : Nat = print "Hello World! " example

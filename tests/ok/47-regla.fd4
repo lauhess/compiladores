@@ -1,2 +1,0 @@
-let h (x:Nat) : Nat = let f : (Nat -> Nat) = fun (y:Nat) -> y in f x
-let c : Nat = print "h = " (h 0)

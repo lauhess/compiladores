@@ -1,5 +1,0 @@
-let x : Nat = ((
-    let a: Nat = 1 in let b: Nat = 2 in a + b) 
-    + 2) 
-
-let y : Nat = print "value of x is: " x

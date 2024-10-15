@@ -1,5 +1,0 @@
-type MyNat = Nat
-
-let f : (MyNat -> MyNat -> MyNat -> MyNat -> Nat) = fun (w:MyNat) -> fun (z:MyNat) -> fun (j:MyNat) -> fun (y:Nat) -> j+y+w+z
-
-let result : Nat = let res : (MyNat -> MyNat -> Nat) = f 8 9 in print "res = " (res 10 11)

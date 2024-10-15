@@ -1,5 +1,0 @@
-let x : Nat = 2
-let y : Nat = 3
-let z : Nat = 4
-
-let s : Nat = print "s = " (x + y + print "z = " z)

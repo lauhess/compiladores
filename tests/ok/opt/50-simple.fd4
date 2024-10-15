@@ -1,1 +1,0 @@
-let x : Nat = print "x = " (1 + 1 + 1)

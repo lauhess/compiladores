@@ -1,1 +1,0 @@
-let f : Nat = (fun (x : Nat) -> (let y : Nat = 1 in (let z : Nat = 3 in 2)) + x) 3

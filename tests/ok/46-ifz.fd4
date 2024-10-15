@@ -1,1 +1,0 @@
-let x : Nat = ifz 0 then (print "si " 0) else (print "no!" 1)

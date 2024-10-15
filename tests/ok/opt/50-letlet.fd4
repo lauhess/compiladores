@@ -1,1 +1,0 @@
-let z : Nat = print "z = " (let x : Nat = 3 in let y : Nat = 4 in x + y)

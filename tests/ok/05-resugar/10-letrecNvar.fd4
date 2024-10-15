@@ -1,1 +1,0 @@
-let a : Nat = let rec f (x : Nat) : (Nat -> Nat) = fun (y : Nat) -> ifz x then y else f (x - 1) y in f 10 0

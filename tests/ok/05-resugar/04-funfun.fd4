@@ -1,1 +1,0 @@
-let f : (Nat -> Nat -> Nat) = fun (x:Nat) -> fun (y:Nat) -> x + y

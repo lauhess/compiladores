@@ -1,1 +1,1 @@
-let x : Nat = 123
+let x = 123

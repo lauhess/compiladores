@@ -1,3 +1,0 @@
-let seven (z: Nat): Nat = (let x : Nat = 3 in let y : Nat = 4 in x + y) 
-let rec f (x : Nat) : Nat = ifz x then 0 else (seven x) + f (x - 1)
-let a : Nat = print "a = " (f 10)
