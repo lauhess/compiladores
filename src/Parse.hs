@@ -104,13 +104,20 @@ typeP = try typeP'
 const :: P Const
 const = CNat <$> num
 
+printNat :: P (Maybe STerm)
+printNat = try (do a <- atom
+                   return (Just a))
+           <|> return Nothing
+
 printOp :: P STerm
 printOp = do
   i <- getPos
   reserved "print"
   str <- option "" stringLiteral
-  a <- atom
-  return (SPrint i str a)
+  a <- printNat
+  case a of
+    Just n -> return (SPrint i str n)
+    Nothing -> return $ SLam i [("x", SNatTy)] (SPrint i str (SV i "x"))
 
 binary :: String -> BinaryOp -> Assoc -> Operator String () Identity STerm
 binary s f = Ex.Infix (reservedOp s >> return (SBinaryOp NoPos f))
