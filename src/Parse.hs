@@ -23,6 +23,7 @@ import Text.ParserCombinators.Parsec.Language --( GenLanguageDef(..), emptyDef )
 import qualified Text.Parsec.Expr as Ex
 import Text.Parsec.Expr (Operator, Assoc)
 import Control.Monad.Identity (Identity)
+import Debug.Trace (trace, traceM)
 
 type P = Parsec String ()
 
@@ -206,7 +207,7 @@ letFunction :: P [(Name, SType)]
 letFunction = do
   name <- var
   binds <- binders
-  reserved ":"
+  reservedOp ":"
   myType <- typeP
   return ((name,myType) : binds)
 
@@ -227,7 +228,7 @@ tm :: P STerm
 tm = app <|> lam <|> ifz <|> printOp <|> fix <|> letexp
 
 bindingLet :: P [(Name, SType)]
-bindingLet = try ((parens binding <|> binding) >>= \b -> return [b]) <|> letFunction
+bindingLet = try ((try (parens binding) <|> binding) >>= \b -> return [b]) <|> letFunction
 
 -- | Parser de declaraciones Let
 letDecl :: P (SDecl STerm)
