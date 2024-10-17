@@ -141,7 +141,7 @@ bcc t = case t of
   Print _ str t1 -> do
     bt <- bcc t1
     let sbc = string2bc str
-    return $ [PRINT] ++ sbc ++ [NULL] ++ bt ++ [PRINTN]
+    return $ bt ++ [PRINT] ++ sbc ++ [NULL] ++ [PRINTN]
   BinaryOp _ Add t1 t2 -> do
     b1 <- bcc t1
     b2 <- bcc t2

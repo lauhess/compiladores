@@ -22,7 +22,7 @@ import Data.List (nub, isPrefixOf, intercalate )
 import Data.Char ( isSpace )
 import Control.Exception ( catch , IOException )
 import System.IO ( hPrint, stderr, hPutStrLn )
-import Data.Maybe ( fromMaybe )
+import Data.Maybe ( fromMaybe, isJust )
 import Control.Monad (when)
 import System.Exit ( exitWith, ExitCode(ExitFailure) )
 import Options.Applicative
@@ -160,10 +160,11 @@ byteCompileFile f = do
     printFD4 ("Abriendo " ++ f ++ "...")
     sdecls <- loadFile f
     mdecls <- mapM elabDecl sdecls
-    let sdecl = GHC.Base.sequence mdecls
+    -- let sdecl = GHC.Base.sequence mdecls
+    let sdecl = filter isJust mdecls
     prog <- case sdecl of
-      Nothing -> failFD4 "Error de compilacion"
-      Just decl ->  mapM (\sd -> typecheckDecl sd >>= \d -> addDecl d >> return d) decl
+      [] -> failFD4 "Error de compilacion o Compilacion vacia"
+      decl ->  mapM (\(Just sd) -> typecheckDecl sd >>= \d -> addDecl d >> return d) decl
     printFD4 $  "Compilando " ++ f ++ " a bytecode "
     bytecode <- bytecompileModule prog
     let fp = changeExtension f "bc32"
@@ -177,7 +178,7 @@ byteRunVmFile :: MonadFD4 m => FilePath -> m ()
 byteRunVmFile f = do
   --printFD4 ("Abriendo " ++ f ++ "...")
   bs <- liftIO $ bcRead f
-  printFD4 (showBC bs)
+  -- printFD4 (showBC bs)
   r <- runBC bs
 
   profEnabled <- getProf
