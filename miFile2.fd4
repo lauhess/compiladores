@@ -1,4 +1,0 @@
-let f (x : Nat) (y : Nat) : Nat = x+y
-let uno : Nat = 1
-let dos : Nat = 2
-let r : Nat = print "r = " (f uno dos)
