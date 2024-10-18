@@ -21,6 +21,7 @@ type Kont = [Frame]
 data Val =
       Vall Int
     | ClosFun [Val] Name Ty TTerm
+    | ClosLet [Val] Name Ty TTerm
     | ClosFix [Val] Name Ty Name Ty TTerm
     deriving Show
 
@@ -45,7 +46,8 @@ seek' term p k = incTranCount >> case term of
     (Const _ (CNat n))  -> destroy (Vall n) k
     (Lam _ n ty (Sc1 t)) ->   destroy (ClosFun p n ty t) k
     (Fix _ n1 ty1 n2 ty2 (Sc2 t)) -> destroy (ClosFix p n1 ty1 n2 ty2 t) k
-    (Let info n ty s (Sc1 t))   -> seek' (App info (Lam info n ty (Sc1 t)) s) p k
+    -- (Let info n ty s (Sc1 t))   -> seek' (App info (Lam info n ty (Sc1 t)) s) p k
+    (Let _ n ty s (Sc1 t))   -> seek' s p (Clos (ClosLet p n ty t) : k)
 
 -- Da valor a una continuación << >>
 destroy :: MonadFD4 m => Val          -> Kont -> m Val
@@ -59,6 +61,7 @@ destroy var kont = incTranCount >> go var kont
         go v ((AppEval p t):ks) = seek' t p (Clos v:ks)
         go v ((Clos val):ks) = incClosCount >> case val of
             (ClosFun p _ _ t)     -> seek' t (v:p) ks
+            (ClosLet p _ _ t)     -> seek' t (v:p) ks
             (ClosFix p _ _ _ _ t) -> seek' t (v:val:p) ks
             _                     -> failFD4 "Destroy esperaba clausura y recibio Vall"
         go v [] = return v
@@ -73,6 +76,9 @@ val2term val = case val of
   ClosFix vs n1 ty1 n2 ty2 t -> 
     let c = go vs (length vs) t
     in Fix (NoPos, ty1) n1 ty1 n2 ty2 $ Sc2 c
+  ClosLet vs n ty t ->
+    let c = go vs (length vs) t
+    in Let (NoPos, ty) n ty (val2term (head vs)) $ Sc1 c
   where
     go [] _ term = term
     go (v:vs') m term = go vs' (m - 1) (subst' m (val2term v) (Sc1 term))
