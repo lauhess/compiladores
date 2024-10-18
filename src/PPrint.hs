@@ -172,6 +172,9 @@ t2doc :: Bool     -- Debe ser un átomo?
 {- t2doc at x = text (show x) -}
 t2doc at (SV _ x) = name2doc x
 t2doc at (SConst _ c) = c2doc c
+t2doc at (SLam p [x] (SPrint p' str _)) | p == p' =
+  parenIf at $
+  sep [keywordColor (pretty "print"), pretty (show str)]
 t2doc at (SLam _ xs t) =
   parenIf at $
   sep [sep ([ keywordColor (pretty "fun") ] ++
