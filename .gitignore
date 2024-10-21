@@ -3,3 +3,5 @@
 dist-newstyle/*
 
 .fd4_history
+.vscode/*
+src/haskell_vscode.log

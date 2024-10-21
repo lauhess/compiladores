@@ -19,7 +19,7 @@
 STATIC_ASSERT(sizeof (int) >= sizeof (uint32_t));
 
 /* Habilitar impresión de traza? */
-#define TRACE 1
+#define TRACE 0 
 
 enum {
 	RETURN   = 1,
@@ -335,7 +335,6 @@ void run(code init_c)
 			 * entorno con el valor de la aplicación, pero
 			 * tenemos que guardar nuestra dirección de retorno.
 			 */
-			printf("\n\n>call\n\n");
 			value arg = *--s;
 			value fun = *--s;
 
