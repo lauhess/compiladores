@@ -40,8 +40,8 @@ jobs:
         cabal build --only-dependencies --enable-tests --enable-benchmarks
     - name: Build
       run: |
-        cabal build --enable-tests --enable-benchmarks all
-        cabal test all
+        make
+        make vm
 
     - name: Run tests
       run: make test_all
