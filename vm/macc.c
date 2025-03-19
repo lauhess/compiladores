@@ -19,7 +19,7 @@
 STATIC_ASSERT(sizeof (int) >= sizeof (uint32_t));
 
 /* Habilitar impresión de traza? */
-#define TRACE 0 
+#define TRACE 1 
 
 enum {
 	RETURN   = 1,
@@ -118,6 +118,32 @@ static int env_len(env e)
 	return rc;
 }
 
+/*
+ * Lee un entero sin signo codificado en el formato ULEB128.
+ * Es decir, una secuencia de bytes donde el bit alto de cada byte
+ * indica si hay más bytes a continuación.
+ * Tomamos un puntero al código (puntero a uint32_t) y lo movemos
+ * adelante para que apunte al siguiente byte después del entero
+ * y seguir modificando desde ahí.
+ */
+uint32_t uleb128_to_int(code *c)
+{
+	uint32_t result = 0;
+	uint32_t shift = 0;
+	uint32_t byte;
+
+	do {
+		// ToDo: Borrar cuando esté probado?
+		STATIC_ASSERT(c != NULL); 
+		STATIC_ASSERT(*c != NULL);
+
+		byte = **c;
+		(*c)++;
+		result |= (byte & 0x7f) << shift;
+		shift += 7;
+	} while (byte & 0x80);
+}
+
 void showOp(code cc){
 	fprintf(stderr, "code dir:%p\n",cc);
 	
@@ -129,15 +155,18 @@ void showOp(code cc){
 			fprintf(stderr, "RETURN; ");
 			break;}
 		case CONST:{
-			unsigned c = *cc++;
+			//unsigned c = *cc++;
+			unsigned c = uleb128_to_int(&cc);
 			fprintf(stderr, "CONST %u; ", c);
 			break;}
 		case ACCESS:{
-			unsigned c = *cc++;
+			//unsigned c = *cc++;
+			unsigned c = uleb128_to_int(&cc);
 			fprintf(stderr, "ACCESS %u; ", c);
 			break;}
 		case FUNCTION:{
-			unsigned c = *cc++;
+			//unsigned c = *cc++;
+			unsigned c = uleb128_to_int(&cc);
 			fprintf(stderr, "FUNCTION len=%u; ", c);
 			break;}
 		case CALL:{
@@ -156,11 +185,13 @@ void showOp(code cc){
 			fprintf(stderr, "STOP; ");
 			break;}
 		case CJUMP:{
-			unsigned c = *cc++;
+			//unsigned c = *cc++;
+			unsigned c = uleb128_to_int(&cc);
 			fprintf(stderr, "CJUMP off=%d; ",c);
 			break;}
 		case JUMP:{
-			unsigned c = *cc++;
+			//unsigned c = *cc++;
+			unsigned c = uleb128_to_int(&cc);
 			fprintf(stderr, "JUMP off=%d; ",c);
 			break;}
 		case SHIFT:{
@@ -262,14 +293,16 @@ void run(code init_c)
 			//	quit("FATAL: No hay suficientes valores en el entorno");
 			
 			env env_temp = e;
-			uint32_t i = *c++, access = i;
+
+			uint32_t i = uleb128_to_int(&c), access = i;
+			//uint32_t i = *c++, access = i;
 
 			if (env_temp == NULL)
 				quit("ERROR: Entorno vacio");
 
 			while (i > 0) {
 				if (env_temp->next == NULL) {
-					fprintf(stderr, "ACCESS %d, len env = %d\n",access, env_len(e));
+					fprintf(stderr, "ACCESS %d, len env = %d\n", access, env_len(e));
 					quit("FATAL: No hay suficientes valores en el entorno");
 				}
 
@@ -283,7 +316,9 @@ void run(code init_c)
 
 		case CONST: {
 			/* Una constante: la leemos y la ponemos en la pila */
-			(*s++).i = *c++;
+			//(*s++).i = *c++;
+			// ToDo: WTF?
+			(*s++).i = uleb128_to_int(&c);
 			break;
 		}
 
@@ -373,7 +408,8 @@ void run(code init_c)
 			 * incluye la longitud del cuerpo del lambda en
 			 * el entero siguiente, así que lo consumimos.
 			 */
-			int leng = *c++;
+			//int leng = *c++;
+			int leng = uleb128_to_int(&c);
 
 			/* Ahora sí, armamos la clausura */
 			struct clo clo = {
@@ -448,7 +484,8 @@ void run(code init_c)
 			 * Salto incondicional: leemos la dirección de
 			 * destino y saltamos.
 			 */
-			uint32_t offset = *c++;
+			//uint32_t offset = *c++;
+			uint32_t offset = uleb128_to_int(&c);
 			c += offset;
 			break;
 		}
@@ -460,7 +497,8 @@ void run(code init_c)
 			 * falsa, saltamos.
 			 */
 			value cond = *--s;
-			uint32_t offset = *c++;
+			//uint32_t offset = *c++;
+			uint32_t offset = uleb128_to_int(&c);
 			if (cond.i)
 				c += offset;
 			break;

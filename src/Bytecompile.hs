@@ -1,5 +1,4 @@
 {-# LANGUAGE PatternSynonyms #-}
-{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE LambdaCase #-}
 {-|
 Module      : Bytecompile
@@ -17,26 +16,39 @@ module Bytecompile
  where
 
 import Lang
+    ( BinaryOp(Sub, Add),
+      Const(CNat),
+      Decl(Decl),
+      Module,
+      Scope(Sc1),
+      Scope2(Sc2),
+      TTerm,
+      Tm(Let, V, Lam, App, Fix, IfZ, Const, Print, BinaryOp),
+      Var(Free, Bound, Global) )
 import MonadFD4
 
 import qualified Data.ByteString.Lazy as BS
-import Data.Binary ( Word32, Binary(put, get), decode, encode )
-import Data.Binary.Put ( putWord32le )
-import Data.Binary.Get ( getWord32le, isEmpty )
+import Data.Binary.Get ( isEmpty )
 
 import Data.List (intercalate)
-import Data.Char
 import Eval (semOp)
 import Subst
 import PPrint (pp)
 import Global (Statistics(..), GlEnv (statistics))
 import Optimization (optimizeTerm)
-import Control.Monad
+import Data.Word
+import Data.Binary
+import EncodingUtils (int2bs, bs2int)
 
-type Opcode = Int
-type Bytecode = [Int]
+import qualified Data.ByteString as BSS
+import qualified Data.Text as T
+import qualified Data.Text.Encoding as E
+
+type Opcode = Word8
+type Bytecode = [Word8]
 
 newtype Bytecode32 = BC { un32 :: [Word32] }
+newtype Bytecode8 = BC8 { un8 :: [Word8] } --ToDo: Cambiar constructor a BC cuando se termine de implementar
 
 type Env = [Val]
 data Val = I Int | Fun Env Bytecode | RA Env Bytecode
@@ -53,18 +65,18 @@ printVals True x e vs = printFD4 $  "Next: " ++ intercalate "; " (showOps x)  ++
                                    "\nPila: " ++ intercalate ", " (map show (take 10 vs)) ++ "\n"
 printVals False _ _ _ = return ()
 
-{- Esta instancia explica como codificar y decodificar Bytecode de 32 bits -}
-instance Binary Bytecode32 where
-  put (BC bs) = mapM_ putWord32le bs
+{- Esta instancia explica como codificar y decodificar Bytecode de 8 bits -}
+instance Binary Bytecode8 where
+  put (BC8 bs) = mapM_ putWord8 bs
   get = go
     where go =
            do
             empty <- isEmpty
             if empty
-              then return $ BC []
-              else do x <- getWord32le
-                      BC xs <- go
-                      return $ BC (x:xs)
+              then return $ BC8 []
+              else do x <- getWord8
+                      BC8 xs <- go
+                      return $ BC8 (x:xs)
 
 {- Estos sinónimos de patrón nos permiten escribir y hacer
 pattern-matching sobre el nombre de la operación en lugar del código
@@ -102,16 +114,24 @@ showOps :: Bytecode -> [String]
 showOps [] = []
 showOps (NULL:xs)        = "NULL" : showOps xs
 showOps (RETURN:xs)      = "RETURN" : showOps xs
-showOps (CONST:i:xs)     = ("CONST " ++  show i) : showOps xs
-showOps (ACCESS:i:xs)    = ("ACCESS " ++ show i) : showOps xs
-showOps (FUNCTION:i:xs)  = ("FUNCTION len=" ++ show i) : showOps xs
+showOps (CONST:xs)     =  let (n, xs') = bs2int xs
+                          in ("CONST " ++ show n) : showOps xs'
+showOps (ACCESS:xs)    = let (n, xs') = bs2int xs
+                         in ("ACCESS " ++ show n) : showOps xs'
+--showOps (FUNCTION:i:xs)  = ("FUNCTION len=" ++ show i) : showOps xs
+showOps (FUNCTION:xs)    = let (n, xs') = bs2int xs
+                          in ("FUNCTION len=" ++ show n) : showOps xs'
 showOps (CALL:xs)        = "CALL" : showOps xs
 showOps (ADD:xs)         = "ADD" : showOps xs
 showOps (SUB:xs)         = "SUB" : showOps xs
 showOps (FIX:xs)         = "FIX" : showOps xs
 showOps (STOP:xs)        = "STOP" : showOps xs
-showOps (CJUMP:i:xs)     = ("CJUMP off=" ++ show i) : showOps xs
-showOps (JUMP:i:xs)      = ("JUMP off=" ++ show i) : showOps xs
+--showOps (CJUMP:i:xs)     = ("CJUMP off=" ++ show i) : showOps xs
+showOps (CJUMP:xs)       = let (n, xs') = bs2int xs
+                          in ("CJUMP off=" ++ show n) : showOps xs'
+--showOps (JUMP:i:xs)      = ("JUMP off=" ++ show i) : showOps xs
+showOps (JUMP:xs)        = let (n, xs') = bs2int xs
+                          in ("JUMP off=" ++ show n) : showOps xs'
 showOps (SHIFT:xs)       = "SHIFT" : showOps xs
 showOps (DROP:xs)        = "DROP" : showOps xs
 showOps (PRINT:xs)       = let (msg,_:rest) = span (/=NULL) xs
@@ -124,16 +144,22 @@ showOps (x:xs)           = show x : showOps xs
 showBC :: Bytecode -> String
 showBC = intercalate "; " . showOps
 
+-- Wrapper para obtener el largo de una lista como byte
+-- ToDo: Pensar las limitaciones de esto.
+length8b :: [a] -> Word8
+length8b = fromIntegral . length
+
 -- Compila un término a bytecode
 bcc :: MonadFD4 m => TTerm -> m Bytecode
 bcc t = case t of
-  V _ (Free _) -> failFD4 "implementame! (Bytecompile:114)"
-  V _ (Bound i) -> return [ACCESS, i]
-  V _ (Global _) -> failFD4 "implementame! (Bytecompile:116)"
-  Const _ (CNat n) -> return [CONST, fromIntegral n]
+  V _ (Free _) -> failFD4 "implementame! (Bytecompile:155)"
+  V _ (Bound i) -> let bs = int2bs (fromIntegral i) in return (ACCESS:bs)
+  V _ (Global _) -> failFD4 "implementame! (Bytecompile:157)"
+  Const _ (CNat n) -> return $ CONST : int2bs n
   Lam _ _ _ (Sc1 t1) -> do
     bt <- bctc t1
-    return $ [FUNCTION, length bt] ++ bt
+    let lengthb = int2bs (length bt)
+    return $ [FUNCTION] ++ lengthb ++ bt
   App _ t1 t2 -> do
     b1 <- bcc t1
     b2 <- bcc t2
@@ -152,12 +178,16 @@ bcc t = case t of
     return $ b1 ++ b2 ++ [SUB]
   Fix _ _ _ _ _ (Sc2 t1) -> do
     b1 <- bctc t1
-    return $ [FUNCTION, length b1] ++ b1 ++ [FIX]
+    let lengthb1 = int2bs (length b1)
+    return $ [FUNCTION] ++ lengthb1 ++ b1 ++ [FIX]
   IfZ _ c t1 t2 -> do
     bc <- bcc c
     b1 <- bcc t1
     b2 <- bcc t2
-    return $ bc ++ [CJUMP, length b1 + 2] ++ b1 ++ [JUMP, length b2] ++ b2
+    let lengthCJump = int2bs (length b1 + 2)
+    let lengthJump = int2bs (length b2)
+    --return $ bc ++ [CJUMP, length8b b1 + 2] ++ b1 ++ [JUMP, length8b b2] ++ b2
+    return $ bc ++ [CJUMP] ++ lengthCJump ++ b1 ++ [JUMP] ++ lengthJump ++ b2
     -- [c, JUMP, l1, x1, x2, ..., xn, JUMP, l2, y1, y2, ..., ym]
     --  0, 1,     2, 2 + 1, 2 + 2, 2 + n, 2 + n + 1, 2+n+2,2+n+m]   
     -- - Si c == 1, seguimos ejecutando en la vm, 
@@ -181,7 +211,10 @@ bctc t = case t of
     bc <- bcc c
     b1 <- bctc t1
     b2 <- bctc t2
-    return $ bc ++ [CJUMP, length b1 + 2] ++ b1 ++ [JUMP, length b2] ++ b2
+    let lengthCJump = int2bs (length b1 + 2)
+    let lengthJump = int2bs (length b2)
+    --return $ bc ++ [CJUMP, length8b b1 + 2] ++ b1 ++ [JUMP, length8b b2] ++ b2
+    return $ bc ++ [CJUMP] ++ lengthCJump ++ b1 ++ [JUMP] ++ lengthJump ++ b2
   Let _ _ _ t1 (Sc1 t2) -> do
     b1 <- bcc t1
     b2 <- bctc t2
@@ -194,10 +227,12 @@ bctc t = case t of
 -- ord/chr devuelven los codepoints unicode, o en otras palabras
 -- la codificación UTF-32 del caracter.
 string2bc :: String -> Bytecode
-string2bc = map ord
+string2bc =  BSS.unpack . E.encodeUtf8 . T.pack
+-- string2bc = map ord
 
 bc2string :: Bytecode -> String
-bc2string = map chr
+bc2string = T.unpack . E.decodeUtf8 . BSS.pack
+-- bc2string = map chr
 
 optimizeBytecode :: Bytecode -> Bytecode
 optimizeBytecode [] = []
@@ -235,7 +270,7 @@ decl2term [] = undefined
 
 -- | Toma un bytecode, lo codifica y lo escribe un archivo
 bcWrite :: Bytecode -> FilePath -> IO ()
-bcWrite bs filename = BS.writeFile filename (encode $ BC $ fromIntegral <$> bs)
+bcWrite bs filename = BS.writeFile filename (encode $ BC8 $ fromIntegral <$> bs)
 
 ---------------------------
 -- * Ejecución de bytecode
@@ -243,7 +278,7 @@ bcWrite bs filename = BS.writeFile filename (encode $ BC $ fromIntegral <$> bs)
 
 -- | Lee de un archivo y lo decodifica a bytecode
 bcRead :: FilePath -> IO Bytecode
-bcRead filename = (map fromIntegral <$> un32) . decode <$> BS.readFile filename
+bcRead filename = (map fromIntegral <$> un8) . decode <$> BS.readFile filename
 
 
 runBC :: MonadFD4 m => Bytecode -> m ()
@@ -255,10 +290,16 @@ runBC' bs e s = printVals False bs e s >> incOpCount >> incOpMaxPilaSize s >> ca
   (NULL:xs)       -> runBC' xs e s
   (RETURN:xs)     -> let (val : RA e' bs' : s') = s
                       in runBC' bs' e' (val : s')
-  (CONST:i:xs)    -> runBC' xs e (I i:s)
-  (ACCESS:i:xs)   -> runBC' xs e ( e !! i  : s)
-  (FUNCTION:i:xs) -> let bs' = take i xs
-                      in incOpClaus >> runBC' (drop i xs) e (Fun e bs' : s)
+  --(CONST:i:xs)    -> runBC' xs e (I i:s)
+  (CONST:xs)      -> let (n, xs') = bs2int xs
+                      in runBC' xs' e (I n : s)
+  --(ACCESS:i:xs)   -> runBC' xs e ( e !! i  : s)
+  (ACCESS:xs)     -> let (n, xs') = bs2int xs
+                      in runBC' xs' e (e !! n : s)
+  --(FUNCTION:i:xs) -> let bs' = take i xs
+  --                    in incOpClaus >> runBC' (drop i xs) e (Fun e bs' : s)
+  (FUNCTION:xs)   -> let (n, xs') = bs2int xs
+                      in incOpClaus >> runBC' (drop n xs') e (Fun e (take n xs') : s)
   (CALL:xs)       -> let (v: (Fun ef cf) : s') = s
                       in incOpClaus >> runBC' cf (v:ef) (RA e xs:s')
   (ADD:xs)        -> let (I x : I y : s') = s
@@ -269,11 +310,18 @@ runBC' bs e s = printVals False bs e s >> incOpCount >> incOpMaxPilaSize s >> ca
                          efix      = Fun efix bc : e
                       in incOpClaus >> runBC' xs e (Fun efix bc : s')
   (STOP:xs)       -> return (head s)
-  (CJUMP:i:xs)    -> let (I c : s') = s
+  --(CJUMP:i:xs)    -> let (I c : s') = s
+  --                    in case c of
+  --                        0 -> runBC' xs e s'
+  --                        _ -> runBC' (drop i xs) e s'
+  (CJUMP:xs)      -> let (n, xs')   = bs2int xs
+                         (I c : s') = s
                       in case c of
-                          0 -> runBC' xs e s'
-                          _ -> runBC' (drop i xs) e s'
-  (JUMP:i:xs)     -> runBC' (drop i xs) e s
+                          0 -> runBC' xs' e s'
+                          _ -> runBC' (drop n xs') e s'
+  --(JUMP:i:xs)     -> runBC' (drop i xs) e s
+  (JUMP:xs)     -> let (n, xs') = bs2int xs
+                    in runBC' (drop n xs') e s
   (SHIFT:xs)      -> runBC' xs (head s : e) (tail s)
   (DROP:xs)       -> runBC' xs (tail e) s
   (PRINT:xs)      -> let (str, bc') = span (/=NULL) xs
