@@ -1,5 +1,7 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
+
 {-|
 Module      : Bytecompile
 Description : Compila a bytecode. Ejecuta bytecode.

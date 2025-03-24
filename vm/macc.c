@@ -468,15 +468,22 @@ void run(code init_c)
 
 		case PRINTN: {
 			uint32_t i = s[-1].i;
-			wprintf(L"%" PRIu32 "\n", i);
+			printf("%u\n", i);
 			break;
 		}
 
 		case PRINT: {
-			wchar_t wc;
-			while ((wc = *c++))
-				putwchar(wc);
+			uint8_t *cc = c;
+			int counter;
 
+			// ToDo: Revisar
+			for (counter = 0; *cc != 0; counter++) {
+				putchar(*cc);
+				cc++;
+				//printf("%c", *cc);
+			}
+			//fprintf(stderr, "Counter: %d\n", counter);
+			c += counter+1;	
 			break;
 		}
 
