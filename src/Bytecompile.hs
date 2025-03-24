@@ -33,7 +33,6 @@ import Data.Binary
 import Data.Binary.Get ( isEmpty )
 import qualified Data.ByteString as BSS
 import qualified Data.ByteString.Lazy as BS
-import Data.Functor ()
 import Data.List (intercalate)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as E
@@ -283,7 +282,7 @@ bcRead filename = (map fromIntegral <$> un8) . decode <$> BS.readFile filename
 
 
 runBC :: MonadFD4 m => Bytecode -> m ()
-runBC bc = void $ inicializarStats >> runBC' bc [] []
+runBC bc = inicializarStats >> runBC' bc [] [] >> return ()
 
 runBC' :: MonadFD4 m => Bytecode -> Env -> [Val] -> m Val
 runBC' bs e s = printVals False bs e s >> incOpCount >> incOpMaxPilaSize s >> case bs of
