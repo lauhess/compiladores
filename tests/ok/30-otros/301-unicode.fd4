@@ -1,0 +1,1 @@
+let (x:Nat) = print "¡Hola! áéíóúüñ " 123

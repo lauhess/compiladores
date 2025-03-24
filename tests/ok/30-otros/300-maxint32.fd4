@@ -1,0 +1,2 @@
+let (maxInt32:Nat)  = print "max int 32: " 2147483647
+let (maxUInt32:Nat) = print "max unsigned int 32: " 4294967295 
