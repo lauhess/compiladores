@@ -17,8 +17,7 @@ import Global
 import MonadFD4
 import PPrint
 import Subst
-import Control.Monad
-
+import GHC.Base (when) -- Para que corra CI
 
 -- | 'tc' chequea y devuelve el tipo de un término 
 -- Si el término no está bien tipado, lanza un error

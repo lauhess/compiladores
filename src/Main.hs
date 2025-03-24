@@ -26,6 +26,7 @@ import Data.Maybe ( fromMaybe, isJust )
 
 import System.Exit ( exitWith, ExitCode(ExitFailure) )
 import Options.Applicative
+import GHC.Base (when) -- Para que corra CI
 
 import Global
 import Errors
