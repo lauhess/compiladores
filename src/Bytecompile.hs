@@ -29,22 +29,21 @@ import Lang
       Var(Free, Bound, Global) )
 import MonadFD4
 
-import qualified Data.ByteString.Lazy as BS
-import Data.Binary.Get ( isEmpty )
-
-import Data.List (intercalate)
-import Eval (semOp)
-import Subst
-import PPrint (pp)
-import Global (Statistics(..), GlEnv (statistics))
-import Optimization (optimizeTerm)
-import Data.Word
 import Data.Binary
-import EncodingUtils (int2bs, bs2int)
-
+import Data.Binary.Get ( isEmpty )
 import qualified Data.ByteString as BSS
+import qualified Data.ByteString.Lazy as BS
+import Data.Functor ()
+import Data.List (intercalate)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as E
+
+import EncodingUtils (int2bs, bs2int)
+import Eval (semOp)
+import Global (Statistics(..), GlEnv (statistics))
+import Optimization (optimizeTerm)
+import PPrint (pp)
+import Subst
 
 type Opcode = Word8
 type Bytecode = [Word8]
