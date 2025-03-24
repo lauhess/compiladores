@@ -1,7 +1,9 @@
 all: macc
 
-%.o: CFLAGS+= -Wall -pedantic -g
-macc: LDLIBS +=-lgc
+CFLAGS += -Wall -pedantic -g
+LDLIBS += -lgc
+
+macc: macc.o
 
 clean:
 	rm -f *.o macc

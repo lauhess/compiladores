@@ -19,7 +19,7 @@
 STATIC_ASSERT(sizeof (int) >= sizeof (uint32_t));
 
 /* Habilitar impresión de traza? */
-#define TRACE 1 
+#define TRACE 0 
 
 enum {
 	RETURN   = 1,
@@ -55,7 +55,7 @@ enum {
  * recorre opcode a opcode operando en la stack. Las más interesantes
  * involucran saltos y la construcción de clausuras.
  */
-typedef uint32_t *code;
+typedef uint8_t *code;
 
 /*
  * Un entorno es una lista enlazada de valores. Representan los valores
@@ -129,8 +129,8 @@ static int env_len(env e)
 uint32_t uleb128_to_int(code *c)
 {
 	uint32_t result = 0;
-	uint32_t shift = 0;
-	uint32_t byte;
+	uint8_t shift = 0;
+	uint8_t byte;
 
 	do {
 		// ToDo: Borrar cuando esté probado?
@@ -142,6 +142,7 @@ uint32_t uleb128_to_int(code *c)
 		result |= (byte & 0x7f) << shift;
 		shift += 7;
 	} while (byte & 0x80);
+	return result;
 }
 
 void showOp(code cc){
