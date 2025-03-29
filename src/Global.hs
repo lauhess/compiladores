@@ -40,6 +40,18 @@ tyEnv :: GlEnv ->  [(Name,Ty)]
 tyEnv g = map (\(Decl _ n t b) -> (n, t))  (glb g)
 
 {-
+  Representa opciones para depurar la ejecución del bytecode en Haskell
+-}
+data DebugOptions = DebugOptions {
+  enabledPrintBytecode :: Bool,
+  enabledPrintStack    :: Bool,
+  enablePrintEnv      :: Bool
+}
+
+defaultDebugOptions :: Maybe DebugOptions
+defaultDebugOptions = Just $ DebugOptions False False False
+
+{-
  Tipo para representar las banderas disponibles en línea de comando.
 -}
 data Mode =
@@ -58,7 +70,8 @@ data Mode =
 data Conf = Conf {
     prof :: Bool,
     opt :: Bool,          --  ^ True, si estan habilitadas las optimizaciones.
-    modo :: Mode
+    modo :: Mode,
+    byteCodeDebugOptions :: Maybe DebugOptions -- Solo se usa si el modo es Bytecompile
 }
 
 -- | Valor del estado inicial

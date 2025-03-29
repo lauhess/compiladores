@@ -92,21 +92,22 @@ main = execParser opts >>= \x@(a,b,c,d,_) ->
     --     Modo, optimizar, profiling, cek, archivos
     go :: (Mode,Bool,Bool,Bool,[FilePath]) -> IO ()
     go (Interactive, opt, prof, True,files) =
-              runOrFail (Conf prof opt InteractiveCEK) (runInputT defaultSettings (repl files) >> mapM_ compileFile files)
+              runOrFail (Conf prof opt InteractiveCEK Nothing) (runInputT defaultSettings (repl files) >> mapM_ compileFile files)
     go (Interactive, opt, prof, False,files) =
-              runOrFail (Conf prof opt Interactive) (runInputT defaultSettings (repl files) >> mapM_ compileFile files)
+              runOrFail (Conf prof opt Interactive Nothing) (runInputT defaultSettings (repl files) >> mapM_ compileFile files)
     -- go (Eval ,opt, prof, True,files) =
     --           runOrFail (Conf prof opt EvalCEK) (runInputT defaultSettings (repl files) >>  mapM_ compileFile files)
     -- go (Eval ,opt, prof, False, files) =
     --           runOrFail (Conf prof opt Eval) (runInputT defaultSettings (repl files) >>  mapM_ compileFile files)
+    -- ToDo: Agregar soporte para personalizar opciones depuración
     go (Bytecompile, opt, prof, cek, files) =
-              runOrFail (Conf prof opt Bytecompile) $ mapM_ byteCompileFile  files
+              runOrFail (Conf prof opt Bytecompile defaultDebugOptions) $ mapM_ byteCompileFile  files
     go (RunVM, opt, prof, cek, files) =
-              runOrFail (Conf prof opt RunVM) $ mapM_ byteRunVmFile files
+              runOrFail (Conf prof opt RunVM Nothing) $ mapM_ byteRunVmFile files
     go (CC, opt, prof, cek, files) =
-              runOrFail (Conf prof opt CC) $ mapM_ ccCopileFile files
+              runOrFail (Conf prof opt CC Nothing) $ mapM_ ccCopileFile files
     go (m, opt, prof, cek, files) =
-              runOrFail (Conf prof opt (if cek then EvalCEK else m) ) $ mapM_ compileFile files
+              runOrFail (Conf prof opt (if cek then EvalCEK else m) Nothing) $ mapM_ compileFile files
 
 runOrFail :: Conf -> FD4 a -> IO a
 runOrFail c m = do

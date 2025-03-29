@@ -30,6 +30,7 @@ module MonadFD4 (
   getMode,
   getOpt,
   getProf,
+  getByteCodeDebugOptions,
   eraseLastFileDecls,
   failPosFD4,
   failFD4,
@@ -78,6 +79,9 @@ getOpt = asks opt
 
 getMode :: MonadFD4 m => m Mode
 getMode = asks modo
+
+getByteCodeDebugOptions :: MonadFD4 m => m (Maybe DebugOptions)
+getByteCodeDebugOptions = asks byteCodeDebugOptions
 
 setInter :: MonadFD4 m => Bool -> m ()
 setInter b = modify (\s-> s {inter = b})

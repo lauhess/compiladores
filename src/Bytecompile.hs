@@ -39,7 +39,7 @@ import qualified Data.Text.Encoding as E
 
 import EncodingUtils (int2bs, bs2int)
 import Eval (semOp)
-import Global (Statistics(..), GlEnv (statistics))
+import Global (Statistics(..), GlEnv (statistics), DebugOptions(..))
 import Optimization (optimizeTerm)
 import PPrint (pp)
 import Subst
@@ -47,8 +47,7 @@ import Subst
 type Opcode = Word8
 type Bytecode = [Word8]
 
-newtype Bytecode32 = BC { un32 :: [Word32] }
-newtype Bytecode8 = BC8 { un8 :: [Word8] } --ToDo: Cambiar constructor a BC cuando se termine de implementar
+newtype Bytecode8 = BC { un8 :: [Word8] }
 
 type Env = [Val]
 data Val = I Int | Fun Env Bytecode | RA Env Bytecode
@@ -59,24 +58,42 @@ instance Show Val where
 
 -- ToDo: Modificar  para soportar varios modos de debug: Solo bytecode, solo pila, ambos, ninguno
 -- Usar potencias dos para representar los modos de debug
-printVals :: MonadFD4 m => Bool -> Bytecode -> Env -> [Val] -> m ()
-printVals True x e vs = printFD4 $  "Next: " ++ intercalate "; " (showOps x)  ++
-                                   "\nEnv: " ++ intercalate ", " (map show e) ++
-                                   "\nPila: " ++ intercalate ", " (map show (take 10 vs)) ++ "\n"
-printVals False _ _ _ = return ()
+--printVals :: MonadFD4 m => Bool -> Bytecode -> Env -> [Val] -> m ()
+--printVals True x e vs = printFD4 $  "Next: " ++ intercalate "; " (showOps x)  ++
+--                                   "\nEnv: " ++ intercalate ", " (map show e) ++
+--                                   "\nPila: " ++ intercalate ", " (map show (take 10 vs)) ++ "\n"
+
+
+printNextBytecode :: MonadFD4 m => Bytecode -> m ()
+printNextBytecode x = printFD4 $  "Next: " ++ intercalate "; " (showOps x)
+
+printEnv :: (MonadFD4 m, Show a) => [a] -> m ()
+printEnv e = printFD4 ( "Env: " ++ intercalate ", " (map show e))
+
+printStack :: (MonadFD4 m, Show a1, Show a2) => [a1] -> [a2] -> m ()
+printStack e vs = printFD4 $  "Pila: " ++ intercalate ", " (map show e) ++ "\nPila: " ++ intercalate ", " (map show (take 10 vs)) ++ "\n"
+
+printVals' :: MonadFD4 m => Bytecode -> Env -> [Val] -> DebugOptions -> m ()
+printVals' x e vs opts = 
+      when (enabledPrintBytecode opts) (printNextBytecode x) 
+  >>  when (enablePrintEnv       opts) (printEnv e)          
+  >>  when (enabledPrintStack    opts) (printStack e vs)
+
+printVals :: MonadFD4 m => Bytecode -> Env -> [Val] -> m ()
+printVals x e vs = getByteCodeDebugOptions >>= maybe (return ()) (printVals' x e vs)
 
 {- Esta instancia explica como codificar y decodificar Bytecode de 8 bits -}
 instance Binary Bytecode8 where
-  put (BC8 bs) = mapM_ putWord8 bs
+  put (BC bs) = mapM_ putWord8 bs
   get = go
     where go =
            do
             empty <- isEmpty
             if empty
-              then return $ BC8 []
+              then return $ BC []
               else do x <- getWord8
-                      BC8 xs <- go
-                      return $ BC8 (x:xs)
+                      BC xs <- go
+                      return $ BC (x:xs)
 
 {- Estos sinónimos de patrón nos permiten escribir y hacer
 pattern-matching sobre el nombre de la operación en lugar del código
@@ -144,11 +161,6 @@ showOps (x:xs)           = show x : showOps xs
 showBC :: Bytecode -> String
 showBC = intercalate "; " . showOps
 
--- Wrapper para obtener el largo de una lista como byte
--- ToDo: Pensar las limitaciones de esto.
-length8b :: [a] -> Word8
-length8b = fromIntegral . length
-
 -- Compila un término a bytecode
 bcc :: MonadFD4 m => TTerm -> m Bytecode
 bcc t = case t of
@@ -186,7 +198,6 @@ bcc t = case t of
     b2 <- bcc t2
     let lengthCJump = int2bs (length b1 + 2)
     let lengthJump = int2bs (length b2)
-    --return $ bc ++ [CJUMP, length8b b1 + 2] ++ b1 ++ [JUMP, length8b b2] ++ b2
     return $ bc ++ [CJUMP] ++ lengthCJump ++ b1 ++ [JUMP] ++ lengthJump ++ b2
     -- [c, JUMP, l1, x1, x2, ..., xn, JUMP, l2, y1, y2, ..., ym]
     --  0, 1,     2, 2 + 1, 2 + 2, 2 + n, 2 + n + 1, 2+n+2,2+n+m]   
@@ -195,7 +206,6 @@ bcc t = case t of
     --   que obviamente saltearemos
     -- - Sino, hacemos un salto de n + 1 (JUMP y el largo de b1), y ejecutamos
     --   la condición del else.
-    -- ToDo: Pensar casos de ifz anidados
   Let _ _ _ t1 (Sc1 t2) -> do
     b1 <- bcc t1
     b2 <- bcc t2
@@ -213,7 +223,6 @@ bctc t = case t of
     b2 <- bctc t2
     let lengthCJump = int2bs (length b1 + 2)
     let lengthJump = int2bs (length b2)
-    --return $ bc ++ [CJUMP, length8b b1 + 2] ++ b1 ++ [JUMP, length8b b2] ++ b2
     return $ bc ++ [CJUMP] ++ lengthCJump ++ b1 ++ [JUMP] ++ lengthJump ++ b2
   Let _ _ _ t1 (Sc1 t2) -> do
     b1 <- bcc t1
@@ -270,7 +279,7 @@ decl2term [] = undefined
 
 -- | Toma un bytecode, lo codifica y lo escribe un archivo
 bcWrite :: Bytecode -> FilePath -> IO ()
-bcWrite bs filename = BS.writeFile filename (encode $ BC8 $ fromIntegral <$> bs)
+bcWrite bs filename = BS.writeFile filename (encode $ BC $ fromIntegral <$> bs)
 
 ---------------------------
 -- * Ejecución de bytecode
@@ -285,7 +294,7 @@ runBC :: MonadFD4 m => Bytecode -> m ()
 runBC bc = inicializarStats >> runBC' bc [] [] >> return ()
 
 runBC' :: MonadFD4 m => Bytecode -> Env -> [Val] -> m Val
-runBC' bs e s = printVals False bs e s >> incOpCount >> incOpMaxPilaSize s >> case bs of
+runBC' bs e s = printVals bs e s >> incOpCount >> incOpMaxPilaSize s >> case bs of
   []              -> return (head s)
   (NULL:xs)       -> runBC' xs e s
   (RETURN:xs)     -> let (val : RA e' bs' : s') = s
@@ -331,7 +340,6 @@ runBC' bs e s = printVals False bs e s >> incOpCount >> incOpMaxPilaSize s >> ca
   (TAILCALL:xs)   -> let (v : Fun eg cg :  s') = s
                       in runBC' cg (v : eg) s'
   (x:xs)          -> failFD4 $ "opcode desconocido: " ++ show x
-
 
 liverator :: TTerm -> TTerm
 liverator   v@(V p (Bound i)) = v
