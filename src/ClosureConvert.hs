@@ -19,8 +19,9 @@ closureConvert t = case t of
   V _ (Global n) -> return $ IrGlobal n
   Const _ co@(CNat n) -> return $ IrConst co
   -- Lam (_, FunTy _ ty) fn tyVar (Sc1 tm) -> do
-  (Lam (_, FunTy _ tyVar tyRet) n _ body@(Sc1 b)) -> do -- ToDo: Revisar primer param FunTy
-    nombreFuncion <- freeName "f"
+    -- ToDo: Usar nombre de la funcino de ser posible (excepcion:)
+  (Lam (_, FunTy f tyVar tyRet) n _ body@(Sc1 b)) -> do -- ToDo: Revisar primer param FunTy
+    nombreFuncion <- freeName (if f == "" then "lam" else f)
     nombreArg <- freeName n
 
     body' <- closureConvert $ open nombreArg body
@@ -45,7 +46,8 @@ closureConvert t = case t of
     return $ IrLet dummyName IrClo ir1 (IrCall (IrAccess (IrVar dummyName) IrFunTy 0) [IrVar dummyName,ir2] (convertType ty))
   Print _ str tm -> do
       ir1 <- closureConvert tm
-      return $ IrPrint str ir1
+      temp <- freeName "temp"
+      return $ IrLet temp IrInt ir1 (IrPrint str (IrVar temp))
   BinaryOp _ op t1 t2 -> do
     ir1 <- closureConvert t1
     ir2 <- closureConvert t2

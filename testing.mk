@@ -23,7 +23,7 @@ CHECK	+= $(patsubst %,%.check_bc32_h,$(TESTS))
 CHECK	+= $(patsubst %,%.check_bc32,$(TESTS))
 # CHECK	+= $(patsubst %,%.check_eval_opt,$(TESTS))
 # CHECK	+= $(patsubst %,%.check_opt,$(TESTS))
-
+CHECK   += $(patsubst %,%.check_cc,$(TESTS))
 # Ejemplo: así se puede apagar un test en particular.
 # CHECK	:= $(filter-out tests/correctos/grande.fd4.check_bc32,$(CHECK))
 
@@ -129,6 +129,27 @@ accept: $(patsubst %,%.accept,$(TESTS))
 	$(Q)touch $@
 	@echo "OK	EVALOPT	$(patsubst %.out,%,$<)"
 
+#
+# gcc runtime.c -lgc *.c
+%.c: %.fd4 $(EXE)
+	$(Q)$(EXE) $(EXTRAFLAGS) -c $< > /dev/null
+
+%.exe: %.c
+	@echo "Compilando $< a $@"
+	gcc -o $@ runtime.c $< -lgc  > /dev/null
+	@echo "Compilado $< a $@"
+
+%.fd4.actual_out_cc: %.exe
+	./$< > $@
+
+# Chequear el código C generado. Se genera el código, se compila y
+# ejecuta, y se compara la salida con la esperada.
+%.check_cc: %.out %.actual_out_cc
+	$(Q)diff -u $^
+	$(Q)touch $@
+	@echo "OK	CC	$(patsubst %.out,%,$<)"
+
+
 # Estas directivas indican que NO se borren los archivos intermedios,
 # así podemos examinarlos, particularmente cuando algo no anda.
 .SECONDARY: $(patsubst %,%.actual_out_eval,$(TESTS))
@@ -138,5 +159,9 @@ accept: $(patsubst %,%.accept,$(TESTS))
 .SECONDARY: $(patsubst %,%.actual_out_eval_opt,$(TESTS))
 .SECONDARY: $(patsubst %,%.actual_opt_out,$(TESTS))
 .SECONDARY: $(patsubst %.fd4,%.bc32,$(TESTS))
+.SECONDARY: $(patsubst %.fd4,%.bc8,$(TESTS))
+.SECONDARY: $(patsubst %,%.actual_out_cc,$(TESTS))
+.SECONDARY: $(patsubst %.fd4,%.c,$(TESTS))
+.SECONDARY: $(patsubst %.fd4,%.exe,$(TESTS))
 
 .PHONY: test_all accept
