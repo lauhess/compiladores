@@ -18,9 +18,7 @@ closureConvert t = case t of
   V _ (Free n) -> return $ IrVar n
   V _ (Global n) -> return $ IrGlobal n
   Const _ co@(CNat n) -> return $ IrConst co
-  -- Lam (_, FunTy _ ty) fn tyVar (Sc1 tm) -> do
-    -- ToDo: Usar nombre de la funcino de ser posible (excepcion:)
-  (Lam (_, FunTy f tyVar tyRet) n _ body@(Sc1 b)) -> do -- ToDo: Revisar primer param FunTy
+  (Lam (_, FunTy f tyVar tyRet) n _ body@(Sc1 b)) -> do
     nombreFuncion <- freeName (if f == "" then "lam" else f)
     nombreArg <- freeName n
 

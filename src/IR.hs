@@ -5,11 +5,12 @@ import Lang
 data Ir = IrVar Name
         | IrGlobal Name
         | IrCall Ir [Ir] IrTy
-                        -- ^ Tipo de expr final
+                        -- ^ Tipo de expr final / tipo del resultado
         | IrConst Const
         | IrPrint String Ir
         | IrBinaryOp BinaryOp Ir Ir 
         | IrLet Name IrTy Ir Ir
+                   -- ^ Tipo de la expreción
         | IrIfZ Ir Ir Ir
         | MkClosure Name [Ir]
         | IrAccess Ir IrTy Int
