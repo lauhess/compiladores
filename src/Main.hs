@@ -101,9 +101,9 @@ main = execParser opts >>= \x@(a,b,c,d,_) ->
     --           runOrFail (Conf prof opt Eval) (runInputT defaultSettings (repl files) >>  mapM_ compileFile files)
     -- ToDo: Agregar soporte para personalizar opciones depuración
     go (Bytecompile, opt, prof, cek, files) =
-              runOrFail (Conf prof opt Bytecompile defaultDebugOptions) $ mapM_ byteCompileFile  files
+              runOrFail (Conf prof opt Bytecompile Nothing) $ mapM_ byteCompileFile  files
     go (RunVM, opt, prof, cek, files) =
-              runOrFail (Conf prof opt RunVM Nothing) $ mapM_ byteRunVmFile files
+              runOrFail (Conf prof opt RunVM defaultDebugOptions) $ mapM_ byteRunVmFile files
     go (CC, opt, prof, cek, files) =
               runOrFail (Conf prof opt CC Nothing) $ mapM_ ccCopileFile files
     go (m, opt, prof, cek, files) =

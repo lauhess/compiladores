@@ -51,6 +51,9 @@ data DebugOptions = DebugOptions {
 defaultDebugOptions :: Maybe DebugOptions
 defaultDebugOptions = Just $ DebugOptions False False False
 
+fullDebugOptions :: Maybe DebugOptions
+fullDebugOptions = Just $ DebugOptions True True True
+
 {-
  Tipo para representar las banderas disponibles en línea de comando.
 -}
