@@ -211,18 +211,22 @@ byteRunVmFile bt f = do
               "\n")
 
 
+
 ccCopileFile :: MonadFD4 m => FilePath -> m ()
 ccCopileFile f = do
   printFD4 ("Abriendo " ++ f ++ "...")
   sdecls <- loadFile f
   mdecls <- mapM elabDecl sdecls
-  let sdecl = GHC.Base.sequence mdecls
+  let sdecl = (sequence . filter isJust) mdecls
+  --let sdecl = Just [ x | Just x <- mdecls ]
   prog <- case sdecl of
     Nothing -> failFD4 "Error de compilacion"
     Just decl ->  mapM (\sd -> typecheckDecl sd >>= \d -> addDecl d >> return d) decl
   printFD4 $  "Compilando " ++ f ++ " a C "
   let ir = runCC prog
-      sourceC = ir2C ir
+  printFD4 (show prog)
+  printFD4 (show ir)
+  let sourceC = ir2C ir
   liftIO $ writeFile (changeExtension f "c") sourceC
 
 parseIO ::  MonadFD4 m => String -> P a -> String -> m a

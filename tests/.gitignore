@@ -5,3 +5,5 @@
 *.actual_opt_out
 *.bc32
 *.bc8
+*.c
+*.exe
