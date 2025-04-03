@@ -13,7 +13,7 @@ Stability   : experimental
 Este módulo permite compilar módulos a la Macchina. También provee
 una implementación de la Macchina para ejecutar el bytecode.
 -}
-module Bytecompile
+module Bytecompile8
   (Bytecode, runBC, bcWrite, bcRead, bytecompileModule, showBC)
  where
 

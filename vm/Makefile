@@ -1,11 +1,12 @@
-all: macc
+all: macc macc8
 
 CFLAGS += -Wall -pedantic -g
 LDLIBS += -lgc
 
 macc: macc.o
+macc8: macc8.o
 
 clean:
-	rm -f *.o macc
+	rm -f *.o macc macc8
 
 .PHONY: clean all

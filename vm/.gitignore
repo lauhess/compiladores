@@ -1,5 +1,6 @@
 *.o
 macc
+macc8
 memcheck.log
 memcheck.log*
 vgcore.*

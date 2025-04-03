@@ -39,11 +39,12 @@ import MonadFD4
 import TypeChecker ( tc, tcDecl )
 import CEK
 import GHC.Base (sequence)
-import Bytecompile (bytecompileModule, bcWrite, bcRead, runBC, showBC)
+import Bytecompile8 (bytecompileModule, bcWrite, bcRead, runBC, showBC)
 import Optimization (optimizeTerm)
 import C
 import ClosureConvert
 import System.Console.Haskeline.Completion (completeFilename)
+import qualified Bytecompile32
 
 defaultSettings :: MonadIO m => Settings m
 defaultSettings = Settings
@@ -62,14 +63,12 @@ parseMode = (,,,) <$>
       (flag' Typecheck ( long "typecheck" <> short 't' <> help "Chequear tipos e imprimir el término")
       <|> flag' Bytecompile (long "bytecompile" <> short 'm' <> help "Compilar a la BVM")
       <|> flag' RunVM (long "runVM" <> short 'r' <> help "Ejecutar bytecode en la BVM")
+      <|> flag' Bytecompile8 (long "bytecompile8" <> help "Compilar a la BVM de 8 bits")
+      <|> flag' RunVM8 (long "runVM8" <> help "Ejecutar bytecode en la BVM de 8 bits")
       <|> flag Interactive Interactive ( long "interactive" <> short 'i' <> help "Ejecutar en forma interactiva")
       <|> flag Eval        Eval        (long "eval" <> short 'e' <> help "Evaluar programa")
       <|> flag' CC ( long "cc" <> short 'c' <> help "Compilar a código C")
-  -- <|> flag' Canon ( long "canon" <> short 'n' <> help "Imprimir canonicalización")
-  -- <|> flag' Assembler ( long "assembler" <> short 'a' <> help "Imprimir Assembler resultante")
-  -- <|> flag' Build ( long "build" <> short 'b' <> help "Compilar")
       )
-   -- <*> pure False
    -- reemplazar por la siguiente línea para habilitar opción
       <*> flag False True (long "optimize" <> short 'o' <> help "Optimizar código")
       <*> flag False True (long "profile" <> short 'p' <> help "Activar profiling")
@@ -101,9 +100,13 @@ main = execParser opts >>= \x@(a,b,c,d,_) ->
     --           runOrFail (Conf prof opt Eval) (runInputT defaultSettings (repl files) >>  mapM_ compileFile files)
     -- ToDo: Agregar soporte para personalizar opciones depuración
     go (Bytecompile, opt, prof, cek, files) =
-              runOrFail (Conf prof opt Bytecompile Nothing) $ mapM_ byteCompileFile  files
+              runOrFail (Conf prof opt Bytecompile Nothing) $ mapM_ (byteCompileFile BC32Bit)  files
     go (RunVM, opt, prof, cek, files) =
-              runOrFail (Conf prof opt RunVM defaultDebugOptions) $ mapM_ byteRunVmFile files
+              runOrFail (Conf prof opt RunVM defaultDebugOptions) $ mapM_ (byteRunVmFile BC32Bit) files
+    go (Bytecompile8, opt, prof, cek, files) =
+              runOrFail (Conf prof opt Bytecompile8 Nothing) $ mapM_ (byteCompileFile BC8Bit)  files
+    go (RunVM8, opt, prof, cek, files) =
+              runOrFail (Conf prof opt RunVM8 defaultDebugOptions) $ mapM_ (byteRunVmFile BC8Bit) files
     go (CC, opt, prof, cek, files) =
               runOrFail (Conf prof opt CC Nothing) $ mapM_ ccCopileFile files
     go (m, opt, prof, cek, files) =
@@ -157,8 +160,8 @@ compileFile f = do
     mapM_ handleDecl decls
     setInter i
 
-byteCompileFile ::  MonadFD4 m => FilePath -> m ()
-byteCompileFile f = do
+byteCompileFile ::  MonadFD4 m => BytecodeType -> FilePath -> m ()
+byteCompileFile bt f = do
     printFD4 ("Abriendo " ++ f ++ "...")
     sdecls <- loadFile f
     mdecls <- mapM elabDecl sdecls
@@ -168,21 +171,36 @@ byteCompileFile f = do
       [] -> failFD4 "Error de compilacion o Compilacion vacia"
       decl ->  mapM (\(Just sd) -> typecheckDecl sd >>= \d -> addDecl d >> return d) decl
     printFD4 $  "Compilando " ++ f ++ " a bytecode "
-    bytecode <- bytecompileModule prog
-    let fp = changeExtension f "bc8"
-    printFD4 $ "Escribiendo bytecode a " ++ fp
-    liftIO (bcWrite bytecode fp)
+    case bt of
+      BC32Bit -> byteCompileFile32 prog f
+      BC8Bit  -> byteCompileFile8 prog f
+
+byteCompileFile32 :: MonadFD4 m => Module -> [Char] -> m ()
+byteCompileFile32 prog f = do 
+  bytecode <- Bytecompile32.bytecompileModule prog
+  let fp = changeExtension f "bc32"
+  printFD4 $ "Escribiendo bytecode a " ++ fp
+  liftIO (Bytecompile32.bcWrite bytecode fp)
+
+byteCompileFile8 :: MonadFD4 m => Module -> [Char] -> m ()
+byteCompileFile8 prog f = do 
+  bytecode <- Bytecompile8.bytecompileModule prog
+  let fp = changeExtension f "bc8"
+  printFD4 $ "Escribiendo bytecode a " ++ fp
+  liftIO (Bytecompile8.bcWrite bytecode fp)
 
 changeExtension :: FilePath -> String -> FilePath
 changeExtension f e = (reverse . dropWhile (/= '.') . reverse) f ++ e
 
-byteRunVmFile :: MonadFD4 m => FilePath -> m ()
-byteRunVmFile f = do
+byteRunVmFile :: MonadFD4 m => BytecodeType -> FilePath -> m ()
+byteRunVmFile bt f = do
   --printFD4 ("Abriendo " ++ f ++ "...")
-  bs <- liftIO $ bcRead f
+  --bs <- liftIO $ bcRead f
   --printFD4 (showBC bs)
-  r <- runBC bs
-
+  --runBC bs
+  case bt of 
+    BC32Bit -> (liftIO . Bytecompile32.bcRead) f >>= Bytecompile32.runBC 
+    BC8Bit  -> (liftIO . Bytecompile8.bcRead) f >>= Bytecompile8.runBC
   profEnabled <- getProf
   when profEnabled (do
     s <- gets statistics

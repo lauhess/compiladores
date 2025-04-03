@@ -54,6 +54,9 @@ defaultDebugOptions = Just $ DebugOptions False False False
 fullDebugOptions :: Maybe DebugOptions
 fullDebugOptions = Just $ DebugOptions True True True
 
+data BytecodeType = BC8Bit | BC32Bit 
+  deriving (Show, Eq)
+  
 {-
  Tipo para representar las banderas disponibles en línea de comando.
 -}
@@ -64,11 +67,10 @@ data Mode =
   | InteractiveCEK
   | EvalCEK
   | Bytecompile
+  | Bytecompile8
   | RunVM
+  | RunVM8
   | CC
-  -- | Canon
-  -- | Assembler
-  -- | Build
   deriving Show
 data Conf = Conf {
     prof :: Bool,
