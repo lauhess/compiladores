@@ -26,7 +26,7 @@ import Data.Maybe ( fromMaybe, isJust )
 
 import System.Exit ( exitWith, ExitCode(ExitFailure) )
 import Options.Applicative
-import GHC.Base (when) -- Para que corra CI
+import GHC.Base ( when, sequence )
 
 import Global
 import Errors
@@ -38,7 +38,6 @@ import PPrint ( pp , ppTy, ppDecl, openAll, colorear )
 import MonadFD4
 import TypeChecker ( tc, tcDecl )
 import CEK
-import GHC.Base (sequence)
 import Bytecompile8 (bytecompileModule, bcWrite, bcRead, runBC, showBC)
 import Optimization (optimizeTerm)
 import C
@@ -79,7 +78,7 @@ parseArgs :: Parser (Mode, Bool, Bool, Bool, [FilePath])
 parseArgs = (\(a, opt, prof, cek) c -> (a, opt, prof, cek, c)) <$> parseMode <*> many (argument str (metavar "FILES..."))
 
 main :: IO ()
-main = execParser opts >>= \x@(a,b,c,d,_) -> 
+main = execParser opts >>= \x@(a,b,c,d,_) ->
   -- putStrLn ("Options: " ++ show a ++ show b ++ show c ++ show d) >> 
   go x
   where
@@ -143,7 +142,7 @@ repl args = do
 loadFile ::  MonadFD4 m => FilePath -> m [SDecl STerm]
 loadFile f = do
 
-    let filename = reverse(dropWhile isSpace (reverse f))
+    let filename = reverse (dropWhile isSpace (reverse f))
     x <- liftIO $ catch (readFile filename)
                (\e -> do let err = show (e :: IOException)
                          hPutStrLn stderr ("No se pudo abrir el archivo " ++ filename ++ ": " ++ err)
@@ -176,14 +175,14 @@ byteCompileFile bt f = do
       BC8Bit  -> byteCompileFile8 prog f
 
 byteCompileFile32 :: MonadFD4 m => Module -> [Char] -> m ()
-byteCompileFile32 prog f = do 
+byteCompileFile32 prog f = do
   bytecode <- Bytecompile32.bytecompileModule prog
   let fp = changeExtension f "bc32"
   printFD4 $ "Escribiendo bytecode a " ++ fp
   liftIO (Bytecompile32.bcWrite bytecode fp)
 
 byteCompileFile8 :: MonadFD4 m => Module -> [Char] -> m ()
-byteCompileFile8 prog f = do 
+byteCompileFile8 prog f = do
   bytecode <- Bytecompile8.bytecompileModule prog
   let fp = changeExtension f "bc8"
   printFD4 $ "Escribiendo bytecode a " ++ fp
@@ -198,8 +197,8 @@ byteRunVmFile bt f = do
   --bs <- liftIO $ bcRead f
   --printFD4 (showBC bs)
   --runBC bs
-  case bt of 
-    BC32Bit -> (liftIO . Bytecompile32.bcRead) f >>= Bytecompile32.runBC 
+  case bt of
+    BC32Bit -> (liftIO . Bytecompile32.bcRead) f >>= Bytecompile32.runBC
     BC8Bit  -> (liftIO . Bytecompile8.bcRead) f >>= Bytecompile8.runBC
   profEnabled <- getProf
   when profEnabled (do
@@ -217,7 +216,7 @@ ccCopileFile f = do
   printFD4 ("Abriendo " ++ f ++ "...")
   sdecls <- loadFile f
   mdecls <- mapM elabDecl sdecls
-  let sdecl = (sequence . filter isJust) mdecls
+  let sdecl = (GHC.Base.sequence . filter isJust) mdecls
   --let sdecl = Just [ x | Just x <- mdecls ]
   prog <- case sdecl of
     Nothing -> failFD4 "Error de compilacion"

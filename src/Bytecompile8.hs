@@ -43,6 +43,7 @@ import Global (Statistics(..), GlEnv (statistics), DebugOptions(..))
 import Optimization (optimizeTerm)
 import PPrint (pp)
 import Subst
+import GHC.Base (when) -- Para CI
 
 type Opcode = Word8
 type Bytecode = [Word8]

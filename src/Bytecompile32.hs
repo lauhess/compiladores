@@ -18,7 +18,7 @@ module Bytecompile32
 
 import Lang
 import MonadFD4
-  
+
 import qualified Data.ByteString.Lazy as BS
 import Data.Binary ( Word32, Binary(put, get), decode, encode )
 import Data.Binary.Put ( putWord32le )
@@ -32,6 +32,7 @@ import PPrint (pp)
 import Global (Statistics(..), GlEnv (statistics))
 import Optimization (optimizeTerm)
 import Control.Monad
+import GHC.Base (when) -- Para CI
 
 type Opcode = Int
 type Bytecode = [Int]
