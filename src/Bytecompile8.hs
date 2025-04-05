@@ -244,15 +244,24 @@ bc2string :: Bytecode -> String
 bc2string = T.unpack . E.decodeUtf8 . BSS.pack
 -- bc2string = map chr
 
+-- ToDo: Pese a que funciona sin obtener el tamaño correcto de i habría que ser consistentes
 optimizeBytecode :: Bytecode -> Bytecode
 optimizeBytecode [] = []
-optimizeBytecode [DROP] = []
-optimizeBytecode (DROP:xs) =
+-- optimizeBytecode (NULL:xs)        = 
+-- optimizeBytecode (RETURN:xs)      = 
+optimizeBytecode (CONST:i:xs)     = CONST:i:(optimizeBytecode xs)
+optimizeBytecode (ACCESS:i:xs)    = ACCESS:i:(optimizeBytecode xs) 
+optimizeBytecode (FUNCTION:i:xs)  = FUNCTION:i:(optimizeBytecode xs)
+optimizeBytecode (CJUMP:i:xs)     = CJUMP:i:(optimizeBytecode xs)
+optimizeBytecode (JUMP:i:xs)      = JUMP:i:(optimizeBytecode xs)
+-- optimizeBytecode (SHIFT:xs)       = 
+optimizeBytecode (DROP:xs)        = 
   case optimizeBytecode xs of
     []             -> []
     xs'@(RETURN:_) -> xs'
+    xs'@[STOP]     -> xs'
     xs'            -> DROP:xs'
-optimizeBytecode (x:xs) = x:optimizeBytecode xs
+optimizeBytecode (x:xs)           = x : optimizeBytecode xs
 
 bytecompileModule :: MonadFD4 m => Module -> m Bytecode
 -- bytecompileModule m = bytecompileModule' m []
