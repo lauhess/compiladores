@@ -203,8 +203,6 @@ ccCopileFile f = do
     Just decl ->  mapM (\sd -> typecheckDecl sd >>= \d -> addDecl d >> return d) decl
   printFD4 $  "Compilando " ++ f ++ " a C "
   let ir = runCC prog
-  printFD4 (show prog)
-  printFD4 (show ir)
   let sourceC = ir2C ir
   liftIO $ writeFile (changeExtension f "c") sourceC
 
