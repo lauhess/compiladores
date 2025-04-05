@@ -1,6 +1,10 @@
 # TESTDIRS += tests/ok/00-basicos
 TESTDIRS += tests/ok/10-sugar
 TESTDIRS += tests/ok/20-tysym
+# Tests propios para probar ciertos comportamientos del bytecode de 8 bits
+# Puesto que uno es el uso de unicode con carácteres particulares que no van a funcionar
+# con las otras ejecuciones, se deja comentado para que no se ejecute.	
+# TESTDIRS += tests/ok/30-otros
 
 TESTS	:= $(shell find $(TESTDIRS) -name '*.fd4' -type f | sort)
 
@@ -11,6 +15,7 @@ TESTS	:= $(shell find $(TESTDIRS) -name '*.fd4' -type f | sort)
 # la VM si cambió la VM, etc).
 EXE	:= $(shell cabal exec whereis compiladores2023 | awk '{print $$2};')
 VM	:= ./vm/macc
+VM8	:= ./vm/macc8
 
 EXTRAFLAGS	:=
 # EXTRAFLAGS	+= --optimize
@@ -21,11 +26,13 @@ CHECK	+= $(patsubst %,%.check_eval,$(TESTS))
 CHECK	+= $(patsubst %,%.check_cek,$(TESTS))
 CHECK	+= $(patsubst %,%.check_bc32_h,$(TESTS))
 CHECK	+= $(patsubst %,%.check_bc32,$(TESTS))
-# CHECK	+= $(patsubst %,%.check_eval_opt,$(TESTS))
+CHECK	+= $(patsubst %,%.check_bc8_h,$(TESTS))
+CHECK	+= $(patsubst %,%.check_bc8,$(TESTS))
+#CHECK	+= $(patsubst %,%.check_eval_opt,$(TESTS))
 # CHECK	+= $(patsubst %,%.check_opt,$(TESTS))
 CHECK   += $(patsubst %,%.check_cc,$(TESTS))
 # Ejemplo: así se puede apagar un test en particular.
-# CHECK	:= $(filter-out tests/correctos/grande.fd4.check_bc32,$(CHECK))
+# CHECK	:= $(filter-out tests/correctos/grande.fd4.check_bc8,$(CHECK))
 
 # Esta regla corre todos los tests (por sus dependencias) y luego
 # imprime un mensaje.
@@ -79,7 +86,6 @@ accept: $(patsubst %,%.accept,$(TESTS))
 	$(Q)touch $@
 	@echo "OK	CEK	$(patsubst %.out,%,$<)"
 
-
 # Bytecode. Primero la regla para generar el bytecode, no se chequea
 # nada.
 %.bc32: %.fd4 $(EXE)
@@ -93,16 +99,40 @@ accept: $(patsubst %,%.accept,$(TESTS))
 %.check_bc32: %.out %.actual_out_bc32
 	$(Q)diff -u $^
 	$(Q)touch $@
-	@echo "OK	BC32	$(patsubst %.out,%,$<)"
+	@echo "OK	bc32	$(patsubst %.out,%,$<)"
 
 # Idem pero para Macchina en Haskell.
 %.fd4.actual_out_bc32_h: %.bc32 $(EXE)
 	$(Q)$(EXE) $(EXTRAFLAGS) --runVM $< > $@
 
-%.check_bc32_h: %.out %.actual_out_bc32_h
+%.check_bc32_h: %.out %.actual_out_bc32_h	
 	$(Q)diff -u $^
 	$(Q)touch $@
-	@echo "OK	BC32 H	$(patsubst %.out,%,$<)"
+	@echo "OK	bc32 H	$(patsubst %.out,%,$<)"
+
+# Bytecode. Primero la regla para generar el bytecode, no se chequea
+# nada.
+%.bc8: %.fd4 $(EXE)
+	$(Q)$(EXE) $(EXTRAFLAGS) --bytecompile8 $< >/dev/null
+
+# Correr bytecode para generar la salida (con VM en C).
+# Finalmente la comparación.
+%.fd4.actual_out_bc8: %.bc8 $(VM8)
+	$(Q)$(VM8) $< > $@
+
+%.check_bc8: %.out %.actual_out_bc8
+	$(Q)diff -u $^
+	$(Q)touch $@
+	@echo "OK	bc8	$(patsubst %.out,%,$<)"
+
+# Idem pero para Macchina en Haskell.
+%.fd4.actual_out_bc8_h: %.bc8 $(EXE)
+	$(Q)$(EXE) $(EXTRAFLAGS) --runVM8 $< > $@
+
+%.check_bc8_h: %.out %.actual_out_bc8_h	
+	$(Q)diff -u $^
+	$(Q)touch $@
+	@echo "OK	bc8 H	$(patsubst %.out,%,$<)"
 
 # Chequear optimizaciones. No se corre nada, sólo se compara
 # la salida de --typecheck --optimize respecto a la esperada
@@ -154,10 +184,13 @@ accept: $(patsubst %,%.accept,$(TESTS))
 # así podemos examinarlos, particularmente cuando algo no anda.
 .SECONDARY: $(patsubst %,%.actual_out_eval,$(TESTS))
 .SECONDARY: $(patsubst %,%.actual_out_cek,$(TESTS))
+.SECONDARY: $(patsubst %,%.actual_out_bc8,$(TESTS))
 .SECONDARY: $(patsubst %,%.actual_out_bc32,$(TESTS))
+.SECONDARY: $(patsubst %,%.actual_out_bc8_h,$(TESTS))
 .SECONDARY: $(patsubst %,%.actual_out_bc32_h,$(TESTS))
 .SECONDARY: $(patsubst %,%.actual_out_eval_opt,$(TESTS))
 .SECONDARY: $(patsubst %,%.actual_opt_out,$(TESTS))
+.SECONDARY: $(patsubst %.fd4,%.bc8,$(TESTS))
 .SECONDARY: $(patsubst %.fd4,%.bc32,$(TESTS))
 .SECONDARY: $(patsubst %.fd4,%.bc8,$(TESTS))
 .SECONDARY: $(patsubst %,%.actual_out_cc,$(TESTS))

@@ -4,5 +4,6 @@
 *.actual_out*
 *.actual_opt_out
 *.bc32
-*.c
+*.exe
+*.bc8
 *.exe

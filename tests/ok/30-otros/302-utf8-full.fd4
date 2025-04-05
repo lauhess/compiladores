@@ -1,0 +1,1 @@
+let (x:Nat) = print "Prueba: á ñ 😜 海賊王 " 123

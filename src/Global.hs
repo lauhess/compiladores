@@ -40,6 +40,24 @@ tyEnv :: GlEnv ->  [(Name,Ty)]
 tyEnv g = map (\(Decl _ n t b) -> (n, t))  (glb g)
 
 {-
+  Representa opciones para depurar la ejecución del bytecode en Haskell
+-}
+data DebugOptions = DebugOptions {
+  enabledPrintBytecode :: Bool,
+  enabledPrintStack    :: Bool,
+  enablePrintEnv      :: Bool
+}
+
+defaultDebugOptions :: Maybe DebugOptions
+defaultDebugOptions = Just $ DebugOptions False False False
+
+fullDebugOptions :: Maybe DebugOptions
+fullDebugOptions = Just $ DebugOptions True True True
+
+data BytecodeType = BC8Bit | BC32Bit 
+  deriving (Show, Eq)
+  
+{-
  Tipo para representar las banderas disponibles en línea de comando.
 -}
 data Mode =
@@ -49,16 +67,16 @@ data Mode =
   | InteractiveCEK
   | EvalCEK
   | Bytecompile
+  | Bytecompile8
   | RunVM
+  | RunVM8
   | CC
-  -- | Canon
-  -- | Assembler
-  -- | Build
   deriving Show
 data Conf = Conf {
     prof :: Bool,
     opt :: Bool,          --  ^ True, si estan habilitadas las optimizaciones.
-    modo :: Mode
+    modo :: Mode,
+    byteCodeDebugOptions :: Maybe DebugOptions -- Solo se usa si el modo es Bytecompile
 }
 
 -- | Valor del estado inicial
