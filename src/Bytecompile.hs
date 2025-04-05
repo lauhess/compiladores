@@ -201,13 +201,23 @@ bc2string = map chr
 
 optimizeBytecode :: Bytecode -> Bytecode
 optimizeBytecode [] = []
-optimizeBytecode [DROP] = []
-optimizeBytecode (DROP:xs) =
+-- optimizeBytecode (NULL:xs)        = 
+-- optimizeBytecode (RETURN:xs)      = 
+optimizeBytecode (CONST:i:xs)     = CONST:i:(optimizeBytecode xs)
+optimizeBytecode (ACCESS:i:xs)    = ACCESS:i:(optimizeBytecode xs) 
+optimizeBytecode (FUNCTION:i:xs)  = FUNCTION:i:(optimizeBytecode xs)
+optimizeBytecode (CJUMP:i:xs)     = CJUMP:i:(optimizeBytecode xs)
+optimizeBytecode (JUMP:i:xs)      = JUMP:i:(optimizeBytecode xs)
+-- optimizeBytecode (SHIFT:xs)       = 
+optimizeBytecode (DROP:xs)        = 
   case optimizeBytecode xs of
     []             -> []
     xs'@(RETURN:_) -> xs'
+    xs'@[STOP]     -> xs'
     xs'            -> DROP:xs'
-optimizeBytecode (x:xs) = x:optimizeBytecode xs
+optimizeBytecode (x:xs)           = x : optimizeBytecode xs
+
+
 
 bytecompileModule :: MonadFD4 m => Module -> m Bytecode
 -- bytecompileModule m = bytecompileModule' m []
@@ -221,7 +231,6 @@ bytecompileModule m = do
     printFD4 pt
     bc <- bcc t
     let optBC = optimizeBytecode bc
-    -- printFD4 $ intercalate "\n" $ showOps bc
     return (optBC ++ [STOP])
 
 decl2term :: Module -> TTerm
