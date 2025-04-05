@@ -1,0 +1,5 @@
+let shouldPrintThen : Nat =
+    1 + ifz 0 then print "Caso correcto" 0 else print "Caso incorrecto" 1
+
+let shouldPrintElse : Nat =
+    1 + ifz 1 then print "Caso incorrecto" 0 else print "Caso correcto" 1

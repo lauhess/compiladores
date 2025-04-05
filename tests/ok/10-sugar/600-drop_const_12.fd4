@@ -1,0 +1,5 @@
+# Testeamos el opcional de remover instrucciones DROP del
+# final del código en bytecode
+
+let main : Nat = 
+    let doce: Nat = 12 in 12
