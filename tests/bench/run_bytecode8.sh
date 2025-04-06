@@ -1,0 +1,1 @@
+cabal run compiladores2023.cabal -- --runVM8 tests/bench/ack_3_8.bc8

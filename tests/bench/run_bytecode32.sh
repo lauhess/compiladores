@@ -1,0 +1,1 @@
+cabal run compiladores2023.cabal -- -r tests/bench/ack_3_8.bc32

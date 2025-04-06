@@ -165,9 +165,7 @@ accept: $(patsubst %,%.accept,$(TESTS))
 	$(Q)$(EXE) $(EXTRAFLAGS) -c $< > /dev/null
 
 %.exe: %.c
-	@echo "Compilando $< a $@"
 	gcc -o $@ runtime.c $< -lgc  > /dev/null
-	@echo "Compilado $< a $@"
 
 %.fd4.actual_out_cc: %.exe
 	./$< > $@

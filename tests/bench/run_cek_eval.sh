@@ -1,0 +1,1 @@
+cabal run compiladores2023.cabal -- -k tests/bench/ack_3_8.fd4

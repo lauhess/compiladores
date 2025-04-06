@@ -25,19 +25,7 @@ jobs:
     - name: Install C dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install libgc-dev build-essential
-
-    - name: Cache
-      uses: actions/cache@v3
-      env:
-        cache-name: cache-cabal
-      with:
-        path: ~/.cabal
-        key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('**/cabal.project') }}
-        restore-keys: |
-          ${{ runner.os }}-build-${{ env.cache-name }}-
-          ${{ runner.os }}-build-
-          ${{ runner.os }}-
+        sudo apt-get install libgc-dev build-essential hyperfine
 
     - name: Install dependencies
       run: |
@@ -51,3 +39,6 @@ jobs:
 
     - name: Run tests
       run: make test_all
+
+    - name: Run benchmarks
+      run: tests/bench/benchmarks.sh

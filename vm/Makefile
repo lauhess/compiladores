@@ -1,6 +1,6 @@
 all: macc macc8
 
-CFLAGS += -Wall -pedantic -g
+CFLAGS += -Wall -pedantic -g -Os
 LDLIBS += -lgc
 
 macc: macc.o
