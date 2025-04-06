@@ -1,9 +1,3 @@
-*.c
-
-*.check*
-*.actual_out*
-*.actual_opt_out
 *.bc32
-*.exe
 *.bc8
-*.exe
+ack_3_8.c

@@ -168,7 +168,7 @@ accept: $(patsubst %,%.accept,$(TESTS))
 	@gcc -o $@ runtime.c $< -lgc  > /dev/null
 
 %.fd4.actual_out_cc: %.exe
-	./$< > $@
+	@./$< > $@
 
 # Chequear el código C generado. Se genera el código, se compila y
 # ejecuta, y se compara la salida con la esperada.
