@@ -5,3 +5,8 @@ dist-newstyle/*
 .fd4_history
 .vscode/*
 src/haskell_vscode.log
+
+tests/bench/ack_3_8.out
+tests/bench/ackermann_haskell
+tests/bench/ackermann_native
+tests/bench/bytecode8
