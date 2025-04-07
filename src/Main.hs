@@ -291,8 +291,10 @@ typecheckDecl (Decl p x ty t) = do
   term <- elab t
   decl@(Decl _ _ _ tt) <- tcDecl (Decl p x ty term)
   opt <- getOpt
+  prof <- getProf
   if opt then
-    printFD4 "Optimizando..." >>
+    when prof (printFD4 "Optimizando...") >>
+    -- printFD4 "Optimizando..." >>
     optimizeTerm tt >>= \tt' ->
     return (Decl p x ty tt')
   else

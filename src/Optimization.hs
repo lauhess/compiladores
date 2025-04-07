@@ -3,7 +3,7 @@ module Optimization where
 import Lang
 import Eval (semOp)
 import Subst
-import MonadFD4 (MonadFD4, lookupDecl, printFD4)
+import MonadFD4 (MonadFD4, lookupDecl, printFD4, getProf)
 import Data.Foldable (foldrM)
 import PPrint
 
@@ -14,19 +14,22 @@ os :: MonadFD4 m => [TTerm -> m TTerm]
 os = [constantFolding, deadCodeElimination, constantPropagation]
 
 optimizeTerm :: MonadFD4 m => TTerm -> m TTerm
-optimizeTerm t = go t 0 >>= \t' -> 
+optimizeTerm t = do
+  prof <- getProf
+  go prof t 0 
+-- >>= \t' -> 
   -- printFD4 (show t') >> 
-  return t'
+  -- return t'
     where
-        go :: MonadFD4 m => TTerm -> Int -> m TTerm
-        go tm i = do 
+        go :: MonadFD4 m => Bool -> TTerm -> Int -> m TTerm
+        go prof tm i = do 
           ft <- foldrM (\f tm' -> f tm') tm os
           t''' <- pp ft
-          printFD4 t'''
           if compTTerm t ft || i >= iterations
-            then printFD4 ("\tSe hicieron " ++ show i ++ " iteraciones de optimizacion") >> 
-                 return ft 
-            else go ft (i+1)
+            then (if prof 
+              then printFD4 ("\tSe hicieron " ++ show i ++ " iteraciones de optimizacion") >> return ft 
+              else return ft)
+            else go prof ft (i+1)
         
 
 constantPropagation :: MonadFD4 m => TTerm -> m TTerm
@@ -73,7 +76,7 @@ deadCodeElimination t = case t of
   Fix i s ty str ty' (Sc2 t1) -> deadCodeElimination t1 >>= \t1' ->
                                  return $ Fix i s ty str ty' (Sc2 t1')
   IfZ i c t1 t2 -> return $ case c of
-    (Const _ (CNat n)) -> if n == 0 then t2 else t1
+    (Const _ (CNat n)) -> if n == 0 then t1 else t2
     _                  -> t
   Let i s ty t1 (Sc1 t2) -> if True -- boundUse t2 || isImpure t1
                             then deadCodeElimination t1 >>= \t1' ->
