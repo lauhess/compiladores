@@ -158,7 +158,8 @@ bcc t = case t of
     bc <- bcc c
     b1 <- bcc t1
     b2 <- bcc t2
-    return $ bc ++ [CJUMP, length b1 + 2] ++ b1 ++ [JUMP, length b2] ++ b2
+    let len = length b2
+    return $ bc ++ [CJUMP, length b1 + 2] ++ longJump b1 len ++ [JUMP, len] ++ b2 
     -- [c, JUMP, l1, x1, x2, ..., xn, JUMP, l2, y1, y2, ..., ym]
     --  0, 1,     2, 2 + 1, 2 + 2, 2 + n, 2 + n + 1, 2+n+2,2+n+m]   
     -- - Si c == 1, seguimos ejecutando en la vm, 
@@ -182,7 +183,8 @@ bctc t = case t of
     bc <- bcc c
     b1 <- bctc t1
     b2 <- bctc t2
-    return $ bc ++ [CJUMP, length b1 + 2] ++ b1 ++ [JUMP, length b2] ++ b2
+    let len = length b2
+    return $ bc ++ [CJUMP, length b1 + 2] ++ longJump b1 len ++ [JUMP, len] ++ b2
   Let _ _ _ t1 (Sc1 t2) -> do
     b1 <- bcc t1
     b2 <- bctc t2
@@ -340,3 +342,10 @@ incOpMaxPilaSize stack = gets statistics >>= \case
     })
   (StatsCEK _ _) -> failFD4 "Tipo de estadística equivocado."
   _ -> return ()
+
+longJump :: Bytecode -> Int -> Bytecode
+longJump [] j = []
+longJump (JUMP:n:xs) j = if length xs == n
+                        then JUMP:(n+j+2):xs -- El +2 es para coontar la instrucción JUMP [len]
+                        else JUMP:n:xs
+longJump (x:xs) j = x : longJump xs j
