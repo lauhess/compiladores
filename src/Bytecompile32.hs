@@ -174,6 +174,7 @@ bcc t = case t of
       b1 <- bcc (Print i s t1)
       b2 <- bcc (letSimp t3)
       return $ b1 ++ [SHIFT] ++ b2 ++ [DROP]
+    (V _ (Bound 0)) -> bcc t1
     _ -> do
       b1 <- bcc t1
       b2 <- bcc t2
@@ -197,6 +198,7 @@ bctc t = case t of
       b1 <- bcc (Print i s t1)
       b2 <- bctc (letSimp t3)
       return $ b1 ++ [SHIFT] ++ b2
+    (V _ (Bound 0)) -> bctc t1
     _ -> do
       b1 <- bcc t1
       b2 <- bctc t2
@@ -216,14 +218,11 @@ bc2string = map chr
 
 optimizeBytecode :: Bytecode -> Bytecode
 optimizeBytecode []               = []
--- optimizeBytecode (NULL:xs)        = 
--- optimizeBytecode (RETURN:xs)      = 
 optimizeBytecode (CONST:i:xs)     = CONST:i:(optimizeBytecode xs)
 optimizeBytecode (ACCESS:i:xs)    = ACCESS:i:(optimizeBytecode xs)
 optimizeBytecode (FUNCTION:i:xs)  = FUNCTION:i:(optimizeBytecode xs)
 optimizeBytecode (CJUMP:i:xs)     = CJUMP:i:(optimizeBytecode xs)
 optimizeBytecode (JUMP:i:xs)      = JUMP:i:(optimizeBytecode xs)
--- optimizeBytecode (SHIFT:xs)       = 
 optimizeBytecode (DROP:xs)        =
   case optimizeBytecode xs of
     []             -> []
