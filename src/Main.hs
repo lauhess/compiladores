@@ -177,6 +177,8 @@ byteCompileFile bt f = do
 byteCompileFile32 :: MonadFD4 m => Module -> [Char] -> m ()
 byteCompileFile32 prog f = do
   bytecode <- Bytecompile32.bytecompileModule prog
+  prof <- getProf
+  when prof (printFD4 $ Bytecompile32.showBC bytecode)
   let fp = changeExtension f "bc32"
   printFD4 $ "Escribiendo bytecode a " ++ fp
   liftIO (Bytecompile32.bcWrite bytecode fp)
