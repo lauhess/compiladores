@@ -23,7 +23,6 @@ import Text.ParserCombinators.Parsec.Language --( GenLanguageDef(..), emptyDef )
 import qualified Text.Parsec.Expr as Ex
 import Text.Parsec.Expr (Operator, Assoc)
 import Control.Monad.Identity (Identity)
-import Debug.Trace (trace, traceM)
 
 type P = Parsec String ()
 
