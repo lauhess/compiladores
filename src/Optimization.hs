@@ -24,10 +24,9 @@ optimizeTerm t = do
         go :: MonadFD4 m => Bool -> TTerm -> Int -> m TTerm
         go prof tm i = do 
           ft <- foldrM (\f tm' -> f tm') tm os
-          t''' <- pp ft
           if compTTerm t ft || i >= iterations
             then (if prof 
-              then printFD4 ("\tSe hicieron " ++ show i ++ " iteraciones de optimizacion") >> return ft 
+              then printFD4 ("\tSe hicieron " ++ show i ++ " iteraciones de optimizacion") >> pp ft >>= printFD4 >> return ft 
               else return ft)
             else go prof ft (i+1)
         
@@ -52,9 +51,11 @@ constantPropagation t = case t of
                    constantPropagation t1 >>= \t1' ->
                    constantPropagation t2 >>= \t2' ->
                    return $ IfZ i c' t1' t2'
-  Let i s ty t1 s1@(Sc1 t2) -> return $ case t1 of
-    (Const _ (CNat n)) -> subst t1 s1
-    _                  -> t
+  Let i s ty t1 s1@(Sc1 t2) -> case t1 of
+    (Const _ (CNat n)) -> return $ subst t1 s1
+    _                  -> constantPropagation t1 >>= \t1' ->
+                          constantPropagation t2  >>= \t2'  ->
+                          return $ Let i s ty t1' (Sc1 t2')  
 
 deadCodeElimination :: MonadFD4 m => TTerm -> m TTerm
 deadCodeElimination t = case t of
@@ -78,7 +79,7 @@ deadCodeElimination t = case t of
   IfZ i c t1 t2 -> return $ case c of
     (Const _ (CNat n)) -> if n == 0 then t1 else t2
     _                  -> t
-  Let i s ty t1 (Sc1 t2) -> if True -- boundUse t2 || isImpure t1
+  Let i s ty t1 (Sc1 t2) -> if boundUse t2 || isImpure t1
                             then deadCodeElimination t1 >>= \t1' ->
                                  deadCodeElimination t2 >>= \t2' ->
                                  return $ Let i s ty t1' (Sc1 t2')
@@ -97,6 +98,13 @@ constantFolding t = case t of
                  return $ App i t1' t2'
   Print i s t1 -> constantFolding t1 >>= \t1' ->
                   return $ Print i s t1'
+  BinaryOp i Add (Const _ (CNat 0)) var -> return var
+  BinaryOp i Sub var (Const _ (CNat 0)) -> return var
+  BinaryOp i Sub izq@(Const _ (CNat 0)) var -> if isPure var
+                                                then return izq
+                                                else do
+                                                  var' <- constantFolding var
+                                                  return $ BinaryOp i Sub izq var'
   BinaryOp i bo (Const _ (CNat n)) (Const _ (CNat m)) -> return $ Const i (CNat (semOp bo n m))
   BinaryOp i bo t1 t2 -> constantFolding t1 >>= \t1' ->
                          constantFolding t2 >>= \t2' ->
@@ -113,10 +121,16 @@ constantFolding t = case t of
 
 inlineExpansion ::MonadFD4 m => TTerm -> m TTerm
 inlineExpansion t = case t of
+  V i (Global name) -> do
+    var <- lookupDecl name
+    case var of
+      (Just term) -> return term
+      _           -> return t
   V i var -> return t
   Const i co -> return t
   Lam i s ty (Sc1 t1) -> inlineExpansion t1 >>= \t1' ->
                          return $ Lam i s ty (Sc1 t1')
+  App i (Lam _ _ _ t1) c@(Const _ _) -> return $ subst c t1 
   App i t1 t2 -> inlineExpansion t1 >>= \t1' ->
                  inlineExpansion t2 >>= \t2' ->
                  return $ App i t1' t2'
