@@ -3,42 +3,101 @@ module Optimization where
 import Lang
 import Eval (semOp)
 import Subst
-import MonadFD4 (MonadFD4, lookupDecl, printFD4, getProf)
+import MonadFD4 (MonadFD4, lookupDecl, printFD4, getProf, clearFD4, addDecl)
 import Data.Foldable (foldrM)
-import PPrint
+import Control.Monad (when)
+import Data.Function (on)
 
 iterations :: Int
 iterations = 4
 
 os :: MonadFD4 m => [TTerm -> m TTerm]
-os = [constantFolding, deadCodeElimination, constantPropagation]
+os = [constantFolding, deadCodeElimination, constantPropagation, inlineExpansion]
+
+manyApp :: MonadFD4 m => (Decl TTerm -> m (Decl TTerm)) -> Int -> [Decl TTerm] -> m [Decl TTerm]
+manyApp f 0 xs = do
+  prof <- getProf
+  when prof $ printFD4 $ "Se realizaron "++ show iterations ++ " iteraciones de optimizacion"
+  return xs
+manyApp f n xs = do
+  xs' <- mapM f xs
+  let notEqual = filter (not . uncurry (compTTerm `on` declBody)) $ zip xs xs'
+  if null notEqual
+    then do
+      prof <- getProf
+      when prof $ printFD4 $ "Se realizaron "++ show (iterations - n) ++ " iteraciones de optimizacion"
+      return xs'
+    else manyApp f (n-1) xs'
+
+optDecls :: MonadFD4 m => [Decl TTerm] -> m [Decl TTerm]
+optDecls [] = return []
+optDecls ds = do
+  prof <- getProf
+  when prof $ printFD4 "Iniciando optimización de términos"
+  dsOpt <- manyApp optDecls' iterations ds
+  let names   = map declName dsOpt
+      dsOpt'  = dead names dsOpt
+      dsOpt'' = filter (\d -> declName d `notElem` dsOpt') dsOpt
+  when prof $ printFD4 "Eliminando código muerto"
+  clearFD4
+  dsOpt''' <- mapM addDecl dsOpt''
+  return dsOpt
+
+
+dead :: [Name] -> [Decl TTerm] -> [Name]
+dead = foldr dead'
+
+dead' :: Decl TTerm -> [Name] -> [Name]
+dead' _ [] = []
+dead' (Decl _ _ _ t') names' = go names' t'
+  where
+    go :: [Name] -> TTerm -> [Name]
+    go [] _ = []
+    go names t = case t of
+      V _ (Global name) -> filter (/= name) names
+      V _ (Free name)   -> filter (/= name) names
+      V _ _             -> names
+      Const _ _         -> names
+      Lam _ s ty (Sc1 t1) -> go names t1
+      App _ t1 t2       -> go (go names t1) t2
+      Print _ s t1      -> go names t1
+      BinaryOp _ op t1 t2 -> go (go names t1) t2
+      Fix _ s ty str ty' (Sc2 t1) -> go names t1
+      IfZ _ c t1 t2     -> go (go (go names c) t1) t2
+      Let _ s ty t1 (Sc1 t2) -> go (go names t1) t2
+
+optDecls'  :: MonadFD4 m => Decl TTerm -> m (Decl TTerm)
+optDecls' (Decl i name ty t) = optimizeTerm t >>= \t'-> return $ Decl i name ty t'
+
 
 optimizeTerm :: MonadFD4 m => TTerm -> m TTerm
 optimizeTerm t = do
   prof <- getProf
-  go prof t 0 
+  foldrM ($) t os
+  -- return $ Decl i name ty t'
+  -- go prof t 0 
 -- >>= \t' -> 
   -- printFD4 (show t') >> 
   -- return t'
-    where
-        go :: MonadFD4 m => Bool -> TTerm -> Int -> m TTerm
-        go prof tm i = do 
-          ft <- foldrM (\f tm' -> f tm') tm os
-          if compTTerm t ft || i >= iterations
-            then (if prof 
-              then printFD4 ("\tSe hicieron " ++ show i ++ " iteraciones de optimizacion") >> pp ft >>= printFD4 >> return ft 
-              else return ft)
-            else go prof ft (i+1)
-        
+    -- where
+    --     go :: MonadFD4 m => Bool -> TTerm -> Int -> m TTerm
+    --     go prof tm i = do 
+    --       ft <- foldrM ($) tm os
+    --       if compTTerm t ft || i >= iterations
+    --         then (if prof 
+    --           then printFD4 ("\tSe hicieron " ++ show i ++ " iteraciones de optimizacion") >> pp ft >>= printFD4 >> return ft 
+    --           else return ft)
+    --         else go prof ft (i+1)
+
 
 constantPropagation :: MonadFD4 m => TTerm -> m TTerm
 constantPropagation t = case t of
   V i var -> return t
   Const i co -> return t
-  Lam i s ty (Sc1 t1) -> constantPropagation t1 >>= \t1' -> 
+  Lam i s ty (Sc1 t1) -> constantPropagation t1 >>= \t1' ->
                          return $ Lam i s ty (Sc1 t1')
   App i t1 t2 -> constantPropagation t1 >>= \t1' ->
-                 constantPropagation t2 >>= \t2' -> 
+                 constantPropagation t2 >>= \t2' ->
                  return $ App i t1' t2'
   Print i s t1 -> constantPropagation t1 >>= \t1' ->
                   return $ Print i s t1'
@@ -55,7 +114,7 @@ constantPropagation t = case t of
     (Const _ (CNat n)) -> return $ subst t1 s1
     _                  -> constantPropagation t1 >>= \t1' ->
                           constantPropagation t2  >>= \t2'  ->
-                          return $ Let i s ty t1' (Sc1 t2')  
+                          return $ Let i s ty t1' (Sc1 t2')
 
 deadCodeElimination :: MonadFD4 m => TTerm -> m TTerm
 deadCodeElimination t = case t of
@@ -99,12 +158,14 @@ constantFolding t = case t of
   Print i s t1 -> constantFolding t1 >>= \t1' ->
                   return $ Print i s t1'
   BinaryOp i Add (Const _ (CNat 0)) var -> return var
+  BinaryOp i Add var (Const _ (CNat 0)) -> return var
   BinaryOp i Sub var (Const _ (CNat 0)) -> return var
-  BinaryOp i Sub izq@(Const _ (CNat 0)) var -> if isPure var
-                                                then return izq
-                                                else do
-                                                  var' <- constantFolding var
-                                                  return $ BinaryOp i Sub izq var'
+  BinaryOp i Sub izq@(Const _ (CNat 0)) var ->
+    if isPure var   -- Solo optimizamos si la variable es pura 
+    then return izq
+    else do
+      var' <- constantFolding var
+      return $ BinaryOp i Sub izq var'
   BinaryOp i bo (Const _ (CNat n)) (Const _ (CNat m)) -> return $ Const i (CNat (semOp bo n m))
   BinaryOp i bo t1 t2 -> constantFolding t1 >>= \t1' ->
                          constantFolding t2 >>= \t2' ->
@@ -124,13 +185,15 @@ inlineExpansion t = case t of
   V i (Global name) -> do
     var <- lookupDecl name
     case var of
-      (Just term) -> return term
+      (Just term) -> if isPure term 
+                     then return term 
+                     else return t
       _           -> return t
   V i var -> return t
   Const i co -> return t
   Lam i s ty (Sc1 t1) -> inlineExpansion t1 >>= \t1' ->
                          return $ Lam i s ty (Sc1 t1')
-  App i (Lam _ _ _ t1) c@(Const _ _) -> return $ subst c t1 
+  App i (Lam _ _ _ t1) c@(Const _ _) -> return $ subst c t1
   App i t1 t2 -> inlineExpansion t1 >>= \t1' ->
                  inlineExpansion t2 >>= \t2' ->
                  return $ App i t1' t2'
@@ -170,7 +233,7 @@ compTTerm (Let _ _ ty1 t11 (Sc1 t12)) (Let _ _ ty2 t21 (Sc1 t22)) =
   ty1 == ty2 && compTTerm t11 t21 && compTTerm t12 t22
 compTTerm _ _ = False
 
-
+-- TODo: ojo con las variables globales, hay que ver si son puras
 isPure :: TTerm -> Bool
 isPure (V p (Global _)) = False
 isPure (V p _) = True
@@ -181,7 +244,7 @@ isPure (IfZ p c t e) = isPure c && isPure t && isPure e
 isPure t@(Const _ _) = True
 isPure (Print p str t) = False
 isPure (BinaryOp p op t u) = isPure t && isPure u
-isPure (Let p v vty m (Sc1 o)) = isPure o
+isPure (Let p v vty m (Sc1 o)) = isPure m && isPure o
 
 isImpure :: TTerm -> Bool
 isImpure t = not (isPure t)

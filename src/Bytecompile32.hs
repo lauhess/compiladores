@@ -237,7 +237,7 @@ bytecompileModule :: MonadFD4 m => Module -> m Bytecode
 -- bytecompileModule m = bytecompileModule' m []
 bytecompileModule [] = return [STOP]
 -- bytecompileModule m = bcc (decl2term m) >>= (\bc -> return (bc ++ [STOP]))
-bytecompileModule m = do
+bytecompileModule m@((Decl info name ty _):_) = do
     let t' = decl2term m
     opt <- getOpt
     t <- if opt then optimizeTerm t' else return t'

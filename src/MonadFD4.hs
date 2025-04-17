@@ -38,6 +38,7 @@ module MonadFD4 (
   catchErrors,
   addTyS,
   lookupTyS,
+  clearFD4,
   MonadFD4,
   module Control.Monad.Except,
   module Control.Monad.State)
@@ -107,6 +108,11 @@ eraseLastFileDecls = do
       let n = cantDecl s
           (_,rem) = splitAt n (glb s)
       modify (\s -> s {glb = rem, cantDecl = 0})
+
+clearFD4 :: MonadFD4 m => m ()
+clearFD4 = do
+    s <- get
+    modify (\s -> s {glb = [], cantDecl = 0})
 
 lookupDecl :: MonadFD4 m => Name -> m (Maybe TTerm)
 lookupDecl nm = do

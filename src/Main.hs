@@ -39,7 +39,7 @@ import MonadFD4
 import TypeChecker ( tc, tcDecl )
 import CEK
 import Bytecompile8 (bytecompileModule, bcWrite, bcRead, runBC, showBC)
-import Optimization (optimizeTerm)
+import Optimization (optDecls)
 import C
 import ClosureConvert
 import System.Console.Haskeline.Completion (completeFilename)
@@ -156,8 +156,28 @@ compileFile f = do
     setInter False
     when i $ printFD4 ("Abriendo "++f++"...")
     decls <- loadFile f
-    mapM_ handleDecl decls
+    ds <- mapM aux decls
+    opt <- getOpt
+    let ds'' = map (\(Just d) -> d) $ filter isJust ds
+    ds' <- if opt then optDecls ds'' else return ds''
+    mapM_ handleDecl' ds'
     setInter i
+
+aux :: MonadFD4 m => SDecl STerm -> m (Maybe (Decl TTerm))
+aux x = do 
+    x1 <- elabDecl x
+    case x1 of
+      Nothing -> return Nothing
+      Just x2 -> do
+        x3 <- typecheckDecl x2
+        addDecl x3
+        return $ Just x3
+        -- handleDecl' x3
+
+-- aux2 :: MonadFD4 m => Maybe (Decl TTerm) -> m ()
+-- aux2 Nothing = return ()
+-- aux2 (Just x) = handleDecl' x
+        
 
 byteCompileFile ::  MonadFD4 m => BytecodeType -> FilePath -> m ()
 byteCompileFile bt f = do
@@ -186,6 +206,8 @@ byteCompileFile32 prog f = do
 byteCompileFile8 :: MonadFD4 m => Module -> [Char] -> m ()
 byteCompileFile8 prog f = do
   bytecode <- Bytecompile8.bytecompileModule prog
+  prof <- getProf
+  when prof (printFD4 $ Bytecompile8.showBC bytecode)
   let fp = changeExtension f "bc8"
   printFD4 $ "Escribiendo bytecode a " ++ fp
   liftIO (Bytecompile8.bcWrite bytecode fp)
@@ -238,42 +260,34 @@ evalDecl (Decl p x t e) = do
     e' <- eval e
     return (Decl p x t e')
 
-handleDecl ::  MonadFD4 m => SDecl STerm -> m ()
-handleDecl d = elabDecl d >>= \case
-  (Just d') -> handleDecl' d'
-  Nothing   -> return ()
+-- handleDecl ::  MonadFD4 m => SDecl STerm -> m ()
+-- handleDecl d = elabDecl d >>= \case
+--   (Just d') -> handleDecl' d'
+--   Nothing   -> return ()
 
-handleDecl' ::  MonadFD4 m => Decl STerm -> m ()
-handleDecl' d = do
+handleDecl' ::  MonadFD4 m => Decl TTerm -> m ()
+handleDecl' td@(Decl p x t tt) = do
         m <- getMode
         case m of
           Interactive -> do
-              (Decl p x t tt) <- typecheckDecl d
               te <- eval tt
               addDecl (Decl p x t te)
           Typecheck -> do
               f <- getLastFile
               printFD4 ("Chequeando tipos de "++f)
-              td <- typecheckDecl d
               addDecl td
-              -- opt <- getOpt
-              -- td' <- if opt then optimize td else td
               ppterm <- ppDecl td  --td'
               printFD4 ppterm
           Eval -> do
-              td <- typecheckDecl d
-              -- td' <- if opt then optimizeDecl td else return td
               ed <- evalDecl td
               addDecl ed
           InteractiveCEK -> do
-            (Decl p x t tt) <- typecheckDecl d
             v <- seek tt
             let tt' = val2term v
             let decl' = Decl p x t tt'
             ppterm <- ppDecl decl'
             addDecl $ Decl p x t $ val2term v
           EvalCEK -> do
-            (Decl p x t tt) <- typecheckDecl d
             v <- seek tt
             let tt' = val2term v
             let decl' = Decl p x t tt'
@@ -294,13 +308,16 @@ typecheckDecl (Decl p x ty t) = do
   decl@(Decl _ _ _ tt) <- tcDecl (Decl p x ty term)
   opt <- getOpt
   prof <- getProf
-  if opt then
-    when prof (printFD4 "Optimizando...") >>
-    -- printFD4 "Optimizando..." >>
-    optimizeTerm tt >>= \tt' ->
-    return (Decl p x ty tt')
-  else
-    return decl
+  when prof (printFD4 "Optimizando...")
+  return decl
+
+  -- if opt then
+  --   when prof (printFD4 "Optimizando...") >>
+  --   -- printFD4 "Optimizando..." >>
+  --   optimizeTerm tt >>= \tt' ->
+  --   return (Decl p x ty tt')
+  -- else
+  --   return decl
 
 
 data Command = Compile CompileForm
@@ -382,7 +399,9 @@ compilePhrase ::  MonadFD4 m => String -> m ()
 compilePhrase x = do
     dot <- parseIO "<interactive>" declOrTm x
     case dot of
-      Left d  -> handleDecl d
+      Left d  -> aux d >>= \case
+        Nothing -> return ()
+        Just d' -> handleDecl' d'
       Right t -> handleTerm t
 
 -- handleTerm ::  MonadFD4 m => STerm -> m ()
