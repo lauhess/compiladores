@@ -138,12 +138,14 @@ deadCodeElimination t = case t of
   IfZ i c t1 t2 -> return $ case c of
     (Const _ (CNat n)) -> if n == 0 then t1 else t2
     _                  -> t
-  Let i s ty t1 (Sc1 t2) -> if boundUse t2 || isImpure t1
-                            then deadCodeElimination t1 >>= \t1' ->
-                                 deadCodeElimination t2 >>= \t2' ->
-                                 return $ Let i s ty t1' (Sc1 t2')
-                            else return $ reBound t2
-                            where reBound = varChanger 0 (\_ p n -> V p (Free n)) (\d p ix -> if ix > d then V p (Bound (ix - 1)) else V p (Bound ix))
+  Let i s ty t1 (Sc1 t2) -> do
+    b1 <- isImpure t1
+    if boundUse t2 || b1
+    then deadCodeElimination t1 >>= \t1' ->
+          deadCodeElimination t2 >>= \t2' ->
+          return $ Let i s ty t1' (Sc1 t2')
+    else return $ reBound t2
+    where reBound = varChanger 0 (\_ p n -> V p (Free n)) (\d p ix -> if ix > d then V p (Bound (ix - 1)) else V p (Bound ix))
 
 
 constantFolding :: MonadFD4 m => TTerm -> m TTerm
@@ -161,9 +163,9 @@ constantFolding t = case t of
   BinaryOp i Add var (Const _ (CNat 0)) -> return var
   BinaryOp i Sub var (Const _ (CNat 0)) -> return var
   BinaryOp i Sub izq@(Const _ (CNat 0)) var ->
-    if isPure var   -- Solo optimizamos si la variable es pura 
-    then return izq
-    else do
+    isPure var >>= \case   -- Solo optimizamos si la variable es pura 
+    True -> return izq
+    False -> do
       var' <- constantFolding var
       return $ BinaryOp i Sub izq var'
   BinaryOp i bo (Const _ (CNat n)) (Const _ (CNat m)) -> return $ Const i (CNat (semOp bo n m))
@@ -185,9 +187,11 @@ inlineExpansion t = case t of
   V i (Global name) -> do
     var <- lookupDecl name
     case var of
-      (Just term) -> if isPure term 
-                     then return term 
-                     else return t
+      (Just term) -> 
+        isPure term >>= \b1 ->
+        if b1 
+           then return term 
+           else return t
       _           -> return t
   V i var -> return t
   Const i co -> return t
@@ -233,18 +237,32 @@ compTTerm (Let _ _ ty1 t11 (Sc1 t12)) (Let _ _ ty2 t21 (Sc1 t22)) =
   ty1 == ty2 && compTTerm t11 t21 && compTTerm t12 t22
 compTTerm _ _ = False
 
--- TODo: ojo con las variables globales, hay que ver si son puras
-isPure :: TTerm -> Bool
-isPure (V p (Global _)) = False
-isPure (V p _) = True
+isPure :: MonadFD4 m => TTerm -> m Bool
+isPure (V p (Global var)) = lookupDecl var >>= \case
+  Just t' -> isPure t'
+  Nothing -> return False
+isPure (V p _) = return True
 isPure (Lam p y ty (Sc1 t))   = isPure t
-isPure (App p l r)   = isPure l && isPure r
+isPure (App p l r)   = do
+  b1 <- isPure l 
+  b2 <- isPure r
+  return $ b1 && b2
 isPure (Fix p f fty x xty (Sc2 t)) = isPure t
-isPure (IfZ p c t e) = isPure c && isPure t && isPure e
-isPure t@(Const _ _) = True
-isPure (Print p str t) = False
-isPure (BinaryOp p op t u) = isPure t && isPure u
-isPure (Let p v vty m (Sc1 o)) = isPure m && isPure o
+isPure (IfZ p c t e) = do 
+  b1 <- isPure c
+  b2 <- isPure t
+  b3 <- isPure e
+  return $ b1 && b2 && b3
+isPure t@(Const _ _) = return True
+isPure (Print p str t) = return False
+isPure (BinaryOp p op t u) = do
+  b1 <- isPure t
+  b2 <- isPure u
+  return $ b1 && b2
+isPure (Let p v vty m (Sc1 o)) = do
+  b1 <- isPure m 
+  b2 <- isPure o
+  return $ b1 && b2
 
-isImpure :: TTerm -> Bool
-isImpure t = not (isPure t)
+isImpure :: MonadFD4 m => TTerm -> m Bool
+isImpure t = isPure t >>= \b -> return $ not b
