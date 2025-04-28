@@ -208,10 +208,17 @@ bcc t = case t of
     --   que obviamente saltearemos
     -- - Sino, hacemos un salto de n + 1 (JUMP y el largo de b1), y ejecutamos
     --   la condición del else.
-  Let _ _ _ t1 (Sc1 t2) -> do
-    b1 <- bcc t1
-    b2 <- bcc t2
-    return $ b1 ++ [SHIFT] ++ b2 ++ [DROP]
+  Let i' _ _ t1 (Sc1 t2) -> case t2 of
+    (Print _ s (V _ (Bound 0))) -> bcc (Print i' s t1)
+    Let i _ _ (Print _ s (V _ (Bound 0))) (Sc1 t3) -> do
+      b1 <- bcc (Print i s t1)
+      b2 <- bcc (letSimp t3)
+      return $ b1 ++ [SHIFT] ++ b2 ++ [DROP]
+    (V _ (Bound 0)) -> bcc t1
+    _ -> do
+      b1 <- bcc t1
+      b2 <- bcc t2
+      return $ b1 ++ [SHIFT] ++ b2 ++ [DROP]
 
 bctc :: MonadFD4 m => TTerm -> m Bytecode
 bctc t = case t of
@@ -226,10 +233,17 @@ bctc t = case t of
     let lengthCJump = int2bs (length b1 + 2)
     let lengthJump = int2bs (length b2)
     return $ bc ++ [CJUMP] ++ lengthCJump ++ b1 ++ [JUMP] ++ lengthJump ++ b2
-  Let _ _ _ t1 (Sc1 t2) -> do
-    b1 <- bcc t1
-    b2 <- bctc t2
-    return $ b1 ++ [SHIFT] ++ b2
+  Let i' _ _ t1 (Sc1 t2) -> case t2 of
+    (Print _ s (V _ (Bound 0))) -> bctc (Print i' s t1)
+    Let i _ _ (Print _ s (V _ (Bound 0))) (Sc1 t3) -> do
+      b1 <- bcc (Print i s t1)
+      b2 <- bctc (letSimp t3)
+      return $ b1 ++ [SHIFT] ++ b2
+    (V _ (Bound 0)) -> bctc t1
+    _ -> do
+      b1 <- bcc t1
+      b2 <- bctc t2
+      return $ b1 ++ [SHIFT] ++ b2
   _ -> do
     bt <- bcc t
     return $ bt ++ [RETURN]
@@ -452,3 +466,6 @@ longJump (PRINT:xs) j     =
   let (str, rest) = span (/=NULL) xs
   in PRINT:str ++ (longJump rest j)
 longJump (x:xs) j          = x : longJump xs j
+
+letSimp :: TTerm -> TTerm
+letSimp = varChanger 0 (\ _ p x -> V p (Free x)) (\ n p i -> if i < n then V p (Bound i) else V p (Bound (i - 1)))
