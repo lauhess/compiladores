@@ -223,6 +223,9 @@ optimizeBytecode (ACCESS:i:xs)    = ACCESS:i:(optimizeBytecode xs)
 optimizeBytecode (FUNCTION:i:xs)  = FUNCTION:i:(optimizeBytecode xs)
 optimizeBytecode (CJUMP:i:xs)     = CJUMP:i:(optimizeBytecode xs)
 optimizeBytecode (JUMP:i:xs)      = JUMP:i:(optimizeBytecode xs)
+optimizeBytecode (PRINT:xs)       =  
+  let (str, rest) = span (/=NULL) xs
+  in PRINT:(str ++ optimizeBytecode rest)
 optimizeBytecode (DROP:xs)        =
   case optimizeBytecode xs of
     []             -> []
@@ -361,9 +364,16 @@ incOpMaxPilaSize stack = gets statistics >>= \case
 
 longJump :: Bytecode -> Int -> Bytecode
 longJump [] j = []
+longJump (CONST:i:xs) j     = CONST:i:longJump xs j
+longJump (ACCESS:i:xs) j    = ACCESS:i:longJump xs j
+longJump (FUNCTION:i:xs) j  = FUNCTION:i:longJump xs j
+longJump (CJUMP:i:xs) j     = CJUMP:i:longJump xs j
+longJump (PRINT:xs) j       = 
+  let (str, rest) = span (/=NULL) xs
+  in PRINT:(str++longJump rest j)
 longJump (JUMP:n:xs) j = if length xs == n
-                        then JUMP:(n+j+2):xs -- El +2 es para coontar la instrucción JUMP [len]
-                        else JUMP:n:xs
+                        then JUMP:(n+j+2):(longJump xs j) -- El +2 es para coontar la instrucción JUMP [len]
+                        else JUMP:n:(longJump xs j)
 longJump (x:xs) j = x : longJump xs j
 
 letSimp :: TTerm -> TTerm
