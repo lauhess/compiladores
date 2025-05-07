@@ -28,6 +28,17 @@ import Lang
       Tm(Let, V, Lam, App, Fix, IfZ, Const, Print, BinaryOp),
       Var(Free, Bound, Global) )
 import MonadFD4
+    ( when,
+      void,
+      failFD4,
+      getByteCodeDebugOptions,
+      getOpt,
+      getProf,
+      printFD4,
+      gets,
+      modify,
+      MonadIO(liftIO),
+      MonadFD4 )
 
 import Data.Binary
 import Data.Binary.Get ( isEmpty )
@@ -317,7 +328,7 @@ bcRead filename = (map fromIntegral <$> un8) . decode <$> BS.readFile filename
 
 
 runBC :: MonadFD4 m => Bytecode -> m ()
-runBC bc = inicializarStats >> runBC' bc [] [] >> return ()
+runBC bc = void $ inicializarStats >> runBC' bc [] []
 
 runBC' :: MonadFD4 m => Bytecode -> Env -> [Val] -> m Val
 runBC' bs e s = printVals bs e s >> incOpCount >> incOpMaxPilaSize s >> case bs of

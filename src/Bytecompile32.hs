@@ -18,6 +18,16 @@ module Bytecompile32
 
 import Lang
 import MonadFD4
+    ( when,
+      void,
+      failFD4,
+      getOpt,
+      getProf,
+      printFD4,
+      gets,
+      modify,
+      MonadIO(liftIO),
+      MonadFD4 )
 
 import qualified Data.ByteString.Lazy as BS
 import Data.Binary ( Word32, Binary(put, get), decode, encode )
