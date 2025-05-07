@@ -28,17 +28,6 @@ import Lang
       Tm(Let, V, Lam, App, Fix, IfZ, Const, Print, BinaryOp),
       Var(Free, Bound, Global) )
 import MonadFD4
-    ( when,
-      void,
-      failFD4,
-      getByteCodeDebugOptions,
-      getOpt,
-      getProf,
-      printFD4,
-      gets,
-      modify,
-      MonadIO(liftIO),
-      MonadFD4 )
 
 import Data.Binary
 import Data.Binary.Get ( isEmpty )
@@ -54,7 +43,8 @@ import Global (Statistics(..), GlEnv (statistics), DebugOptions(..))
 import Optimization (optimizeTerm)
 import PPrint (pp)
 import Subst
-import GHC.Base (when) -- Para CI
+import GHC.Base (when)      -- Para CI
+import Control.Monad (void) -- Para CI
 
 type Opcode = Word8
 type Bytecode = [Word8]

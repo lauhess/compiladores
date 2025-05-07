@@ -18,16 +18,6 @@ module Bytecompile32
 
 import Lang
 import MonadFD4
-    ( when,
-      void,
-      failFD4,
-      getOpt,
-      getProf,
-      printFD4,
-      gets,
-      modify,
-      MonadIO(liftIO),
-      MonadFD4 )
 
 import qualified Data.ByteString.Lazy as BS
 import Data.Binary ( Word32, Binary(put, get), decode, encode )
@@ -40,7 +30,8 @@ import Eval (semOp)
 import Subst
 import Global (Statistics(..), GlEnv (statistics))
 import Optimization (optimizeTerm)
-import GHC.Base (when) -- Para CI
+import GHC.Base (when)      -- Para CI
+import Control.Monad (void) -- Para CI
 
 type Opcode = Int
 type Bytecode = [Int]
