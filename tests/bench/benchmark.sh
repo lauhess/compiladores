@@ -1,7 +1,7 @@
-#hyperfine --warmup 5 --runs 10 \
-#    "tests/bench/run_simple_eval.sh"
-#
-#sleep 5
+hyperfine --warmup 5 --runs 10 \
+    "tests/bench/run_simple_eval.sh"
+
+sleep 5
 
 hyperfine --warmup 5 --runs 25 \
     --prepare "tests/bench/prepare_cc.sh" \
