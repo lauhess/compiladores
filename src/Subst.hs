@@ -109,7 +109,7 @@ boundUse t = go 0 t where
   go n t@(Const _ _) = False
   go n (Print p str t) = go n t
   go n (BinaryOp p op t u) = go n t || go n u
-  go n (Let p v vty m (Sc1 o)) = go (n+1) o
+  go n (Let p v vty m (Sc1 o)) = go n m || go (n+1) o
 
 unElabTy :: Ty -> SType
 unElabTy (NatTy "") = SNatTy

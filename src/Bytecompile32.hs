@@ -158,7 +158,8 @@ bcc t = case t of
     bc <- bcc c
     b1 <- bcc t1
     b2 <- bcc t2
-    return $ bc ++ [CJUMP, length b1 + 2] ++ b1 ++ [JUMP, length b2] ++ b2
+    let len = length b2
+    return $ bc ++ [CJUMP, length b1 + 2] ++ longJump b1 len ++ [JUMP, len] ++ b2
     -- [c, JUMP, l1, x1, x2, ..., xn, JUMP, l2, y1, y2, ..., ym]
     --  0, 1,     2, 2 + 1, 2 + 2, 2 + n, 2 + n + 1, 2+n+2,2+n+m]   
     -- - Si c == 1, seguimos ejecutando en la vm, 
@@ -167,10 +168,17 @@ bcc t = case t of
     -- - Sino, hacemos un salto de n + 1 (JUMP y el largo de b1), y ejecutamos
     --   la condición del else.
     -- ToDo: Pensar casos de ifz anidados
-  Let _ _ _ t1 (Sc1 t2) -> do
-    b1 <- bcc t1
-    b2 <- bcc t2
-    return $ b1 ++ [SHIFT] ++ b2 ++ [DROP]
+  Let i' _ _ t1 (Sc1 t2) -> case t2 of
+    (Print _ s (V _ (Bound 0))) -> bcc (Print i' s t1)
+    Let i _ _ (Print _ s (V _ (Bound 0))) (Sc1 t3) -> do
+      b1 <- bcc (Print i s t1)
+      b2 <- bcc (letSimp t3)
+      return $ b1 ++ [SHIFT] ++ b2 ++ [DROP]
+    (V _ (Bound 0)) -> bcc t1
+    _ -> do
+      b1 <- bcc t1
+      b2 <- bcc t2
+      return $ b1 ++ [SHIFT] ++ b2 ++ [DROP]
 
 bctc :: MonadFD4 m => TTerm -> m Bytecode
 bctc t = case t of
@@ -182,11 +190,19 @@ bctc t = case t of
     bc <- bcc c
     b1 <- bctc t1
     b2 <- bctc t2
-    return $ bc ++ [CJUMP, length b1 + 2] ++ b1 ++ [JUMP, length b2] ++ b2
-  Let _ _ _ t1 (Sc1 t2) -> do
-    b1 <- bcc t1
-    b2 <- bctc t2
-    return $ b1 ++ [SHIFT] ++ b2
+    let len = length b2
+    return $ bc ++ [CJUMP, length b1 + 2] ++ longJump b1 len ++ [JUMP, len] ++ b2
+  Let i' _ _ t1 (Sc1 t2) -> case t2 of
+    (Print _ s (V _ (Bound 0))) -> bctc (Print i' s t1)
+    Let i _ _ (Print _ s (V _ (Bound 0))) (Sc1 t3) -> do
+      b1 <- bcc (Print i s t1)
+      b2 <- bctc (letSimp t3)
+      return $ b1 ++ [SHIFT] ++ b2
+    (V _ (Bound 0)) -> bctc t1
+    _ -> do
+      b1 <- bcc t1
+      b2 <- bctc t2
+      return $ b1 ++ [SHIFT] ++ b2
   _ -> do
     bt <- bcc t
     return $ bt ++ [RETURN]
@@ -201,16 +217,16 @@ bc2string :: Bytecode -> String
 bc2string = map chr
 
 optimizeBytecode :: Bytecode -> Bytecode
-optimizeBytecode [] = []
--- optimizeBytecode (NULL:xs)        = 
--- optimizeBytecode (RETURN:xs)      = 
+optimizeBytecode []               = []
 optimizeBytecode (CONST:i:xs)     = CONST:i:(optimizeBytecode xs)
-optimizeBytecode (ACCESS:i:xs)    = ACCESS:i:(optimizeBytecode xs) 
+optimizeBytecode (ACCESS:i:xs)    = ACCESS:i:(optimizeBytecode xs)
 optimizeBytecode (FUNCTION:i:xs)  = FUNCTION:i:(optimizeBytecode xs)
 optimizeBytecode (CJUMP:i:xs)     = CJUMP:i:(optimizeBytecode xs)
 optimizeBytecode (JUMP:i:xs)      = JUMP:i:(optimizeBytecode xs)
--- optimizeBytecode (SHIFT:xs)       = 
-optimizeBytecode (DROP:xs)        = 
+optimizeBytecode (PRINT:xs)       =  
+  let (str, rest) = span (/=NULL) xs
+  in PRINT:(str ++ optimizeBytecode rest)
+optimizeBytecode (DROP:xs)        =
   case optimizeBytecode xs of
     []             -> []
     xs'@(RETURN:_) -> xs'
@@ -224,11 +240,11 @@ bytecompileModule :: MonadFD4 m => Module -> m Bytecode
 -- bytecompileModule m = bytecompileModule' m []
 bytecompileModule [] = return [STOP]
 -- bytecompileModule m = bcc (decl2term m) >>= (\bc -> return (bc ++ [STOP]))
-bytecompileModule m = do
+bytecompileModule m@((Decl info name ty _):_) = do
     let t' = decl2term m
     opt <- getOpt
     t <- if opt then optimizeTerm t' else return t'
-    pt <- pp t
+    pt <- pp t -- BOrrame
     printFD4 pt
     bc <- bcc t
     let optBC = optimizeBytecode bc
@@ -259,8 +275,13 @@ bcRead filename = (map fromIntegral <$> un32) . decode <$> BS.readFile filename
 runBC :: MonadFD4 m => Bytecode -> m ()
 runBC bc = void $ inicializarStats >> runBC' bc [] []
 
+showState :: MonadFD4 m => Bytecode -> Env -> [Val] -> m ()
+showState bc e s = do
+  opt <- getOpt
+  when opt $ printVals True bc e s
+
 runBC' :: MonadFD4 m => Bytecode -> Env -> [Val] -> m Val
-runBC' bs e s = printVals False bs e s >> incOpCount >> incOpMaxPilaSize s >> case bs of
+runBC' bs e s = showState bs e s  >> incOpCount >> incOpMaxPilaSize s >> case bs of
   []              -> return (head s)
   (NULL:xs)       -> runBC' xs e s
   (RETURN:xs)     -> let (val : RA e' bs' : s') = s
@@ -340,3 +361,20 @@ incOpMaxPilaSize stack = gets statistics >>= \case
     })
   (StatsCEK _ _) -> failFD4 "Tipo de estadística equivocado."
   _ -> return ()
+
+longJump :: Bytecode -> Int -> Bytecode
+longJump [] j = []
+longJump (CONST:i:xs) j     = CONST:i:longJump xs j
+longJump (ACCESS:i:xs) j    = ACCESS:i:longJump xs j
+longJump (FUNCTION:i:xs) j  = FUNCTION:i:longJump xs j
+longJump (CJUMP:i:xs) j     = CJUMP:i:longJump xs j
+longJump (PRINT:xs) j       = 
+  let (str, rest) = span (/=NULL) xs
+  in PRINT:(str++longJump rest j)
+longJump (JUMP:n:xs) j = if length xs == n
+                        then JUMP:(n+j+2):(longJump xs j) -- El +2 es para coontar la instrucción JUMP [len]
+                        else JUMP:n:(longJump xs j)
+longJump (x:xs) j = x : longJump xs j
+
+letSimp :: TTerm -> TTerm
+letSimp = varChanger 0 (\ _ p x -> V p (Free x)) (\ n p i -> if i < n then V p (Bound i) else V p (Bound (i - 1)))

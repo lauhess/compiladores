@@ -37,7 +37,7 @@ import Data.List (intercalate)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as E
 
-import EncodingUtils (int2bs, bs2int)
+import EncodingUtils (int2bs, bs2int, skipBs)
 import Eval (semOp)
 import Global (Statistics(..), GlEnv (statistics), DebugOptions(..))
 import Optimization (optimizeTerm)
@@ -75,9 +75,9 @@ printStack :: (MonadFD4 m, Show a1, Show a2) => [a1] -> [a2] -> m ()
 printStack e vs = printFD4 $  "Pila: " ++ intercalate ", " (map show e) ++ "\nPila: " ++ intercalate ", " (map show (take 10 vs)) ++ "\n"
 
 printVals' :: MonadFD4 m => Bytecode -> Env -> [Val] -> DebugOptions -> m ()
-printVals' x e vs opts = 
-      when (enabledPrintBytecode opts) (printNextBytecode x) 
-  >>  when (enablePrintEnv       opts) (printEnv e)          
+printVals' x e vs opts =
+      when (enabledPrintBytecode opts) (printNextBytecode x)
+  >>  when (enablePrintEnv       opts) (printEnv e)
   >>  when (enabledPrintStack    opts) (printStack e vs)
 
 printVals :: MonadFD4 m => Bytecode -> Env -> [Val] -> m ()
@@ -198,8 +198,9 @@ bcc t = case t of
     b1 <- bcc t1
     b2 <- bcc t2
     let lengthCJump = int2bs (length b1 + 2)
-    let lengthJump = int2bs (length b2)
-    return $ bc ++ [CJUMP] ++ lengthCJump ++ b1 ++ [JUMP] ++ lengthJump ++ b2
+    let lb2 = length b2
+    let lengthJump = int2bs lb2
+    return $ bc ++ [CJUMP] ++ lengthCJump ++ longJump b1 (length lengthJump + lb2) ++ [JUMP] ++ lengthJump ++ b2
     -- [c, JUMP, l1, x1, x2, ..., xn, JUMP, l2, y1, y2, ..., ym]
     --  0, 1,     2, 2 + 1, 2 + 2, 2 + n, 2 + n + 1, 2+n+2,2+n+m]   
     -- - Si c == 1, seguimos ejecutando en la vm, 
@@ -207,10 +208,17 @@ bcc t = case t of
     --   que obviamente saltearemos
     -- - Sino, hacemos un salto de n + 1 (JUMP y el largo de b1), y ejecutamos
     --   la condición del else.
-  Let _ _ _ t1 (Sc1 t2) -> do
-    b1 <- bcc t1
-    b2 <- bcc t2
-    return $ b1 ++ [SHIFT] ++ b2 ++ [DROP]
+  Let i' _ _ t1 (Sc1 t2) -> case t2 of
+    (Print _ s (V _ (Bound 0))) -> bcc (Print i' s t1)
+    Let i _ _ (Print _ s (V _ (Bound 0))) (Sc1 t3) -> do
+      b1 <- bcc (Print i s t1)
+      b2 <- bcc (letSimp t3)
+      return $ b1 ++ [SHIFT] ++ b2 ++ [DROP]
+    (V _ (Bound 0)) -> bcc t1
+    _ -> do
+      b1 <- bcc t1
+      b2 <- bcc t2
+      return $ b1 ++ [SHIFT] ++ b2 ++ [DROP]
 
 bctc :: MonadFD4 m => TTerm -> m Bytecode
 bctc t = case t of
@@ -225,10 +233,17 @@ bctc t = case t of
     let lengthCJump = int2bs (length b1 + 2)
     let lengthJump = int2bs (length b2)
     return $ bc ++ [CJUMP] ++ lengthCJump ++ b1 ++ [JUMP] ++ lengthJump ++ b2
-  Let _ _ _ t1 (Sc1 t2) -> do
-    b1 <- bcc t1
-    b2 <- bctc t2
-    return $ b1 ++ [SHIFT] ++ b2
+  Let i' _ _ t1 (Sc1 t2) -> case t2 of
+    (Print _ s (V _ (Bound 0))) -> bctc (Print i' s t1)
+    Let i _ _ (Print _ s (V _ (Bound 0))) (Sc1 t3) -> do
+      b1 <- bcc (Print i s t1)
+      b2 <- bctc (letSimp t3)
+      return $ b1 ++ [SHIFT] ++ b2
+    (V _ (Bound 0)) -> bctc t1
+    _ -> do
+      b1 <- bcc t1
+      b2 <- bctc t2
+      return $ b1 ++ [SHIFT] ++ b2
   _ -> do
     bt <- bcc t
     return $ bt ++ [RETURN]
@@ -249,13 +264,30 @@ optimizeBytecode :: Bytecode -> Bytecode
 optimizeBytecode [] = []
 -- optimizeBytecode (NULL:xs)        = 
 -- optimizeBytecode (RETURN:xs)      = 
-optimizeBytecode (CONST:i:xs)     = CONST:i:(optimizeBytecode xs)
-optimizeBytecode (ACCESS:i:xs)    = ACCESS:i:(optimizeBytecode xs) 
-optimizeBytecode (FUNCTION:i:xs)  = FUNCTION:i:(optimizeBytecode xs)
-optimizeBytecode (CJUMP:i:xs)     = CJUMP:i:(optimizeBytecode xs)
-optimizeBytecode (JUMP:i:xs)      = JUMP:i:(optimizeBytecode xs)
--- optimizeBytecode (SHIFT:xs)       = 
-optimizeBytecode (DROP:xs)        = 
+optimizeBytecode (CONST:xs)     =
+  -- CONST:i:(optimizeBytecode xs)
+  let (num, xs') = skipBs xs
+  in CONST:num ++ (optimizeBytecode xs')
+optimizeBytecode (ACCESS:xs)    =
+  -- ACCESS:i:(optimizeBytecode xs)
+  let (num, xs') = skipBs xs
+  in ACCESS:num ++ (optimizeBytecode xs')
+optimizeBytecode (FUNCTION:xs)    =
+  -- FUNCTION:i:(optimizeBytecode xs)
+  let (num, xs') = skipBs xs
+  in FUNCTION:num ++ (optimizeBytecode xs')
+optimizeBytecode (CJUMP:xs)       =
+  -- CJUMP:i:xs
+  let (num, xs') = skipBs xs
+  in CJUMP:num ++ (optimizeBytecode xs')
+optimizeBytecode (JUMP:xs)      =
+  -- JUMP:i:(optimizeBytecode xs)
+  let (num, xs') = skipBs xs
+  in JUMP:num ++ (optimizeBytecode xs')
+optimizeBytecode (PRINT:xs)      =
+  let (str, rest) = span (/=NULL) xs
+  in PRINT:str ++ (optimizeBytecode rest)
+optimizeBytecode (DROP:xs)        =
   case optimizeBytecode xs of
     []             -> []
     xs'@(RETURN:_) -> xs'
@@ -267,14 +299,20 @@ bytecompileModule :: MonadFD4 m => Module -> m Bytecode
 -- bytecompileModule m = bytecompileModule' m []
 bytecompileModule [] = return [STOP]
 -- bytecompileModule m = bcc (decl2term m) >>= (\bc -> return (bc ++ [STOP]))
-bytecompileModule m = do
+-- bytecompileModule m = do
+bytecompileModule m@((Decl info name ty _):_) = do
+
     let t' = decl2term m
     opt <- getOpt
+    -- t <- if opt then optimizeTerm t' else return t'
     t <- if opt then optimizeTerm t' else return t'
+
     pt <- pp t
     printFD4 pt
     bc <- bcc t
+    printFD4 $ "Bytecode: " ++ showBC bc
     let optBC = optimizeBytecode bc
+    printFD4 $ "Bytecode: " ++ showBC optBC
     -- printFD4 $ intercalate "\n" $ showOps bc
     return (optBC ++ [STOP])
 
@@ -396,3 +434,38 @@ incOpMaxPilaSize stack = gets statistics >>= \case
     })
   (StatsCEK _ _) -> failFD4 "Tipo de estadística equivocado."
   _ -> return ()
+
+longJump :: Bytecode -> Int -> Bytecode
+longJump [] _ = []
+longJump (CONST:xs) j    =
+  -- CONST:i:(longJump xs)
+  let (num, xs') = skipBs xs
+  in CONST:num ++ (longJump xs' j)
+longJump (ACCESS:xs) j   =
+  -- ACCESS:i:(longJump xs)
+  let (num, xs') = skipBs xs
+  in ACCESS:num ++ (longJump xs' j)
+longJump (FUNCTION:xs) j   =
+  -- FUNCTION:i:(longJump xs)
+  let (num, xs') = skipBs xs
+  in FUNCTION:num ++ (longJump xs' j)
+longJump (CJUMP:xs) j      =
+  -- CJUMP:i:xs
+  let (num, xs') = skipBs xs
+  in CJUMP:num ++ (longJump xs' j)
+longJump (JUMP:n:xs) j =
+  -- if length xs == n
+  -- then JUMP:(n+j+2):(longJump xs j) -- El +2 es para coontar la instrucción JUMP [len]
+  -- else JUMP:n:(longJump xs j)
+  let (num, xs') = skipBs xs
+      (num', _) = bs2int num
+  in if length xs' == num'
+     then JUMP:int2bs (num'+j+1)++(longJump xs' j) -- El +1 es para coontar la instrucción JUMP
+     else JUMP:num ++ (longJump xs' j)
+longJump (PRINT:xs) j     =
+  let (str, rest) = span (/=NULL) xs
+  in PRINT:str ++ (longJump rest j)
+longJump (x:xs) j          = x : longJump xs j
+
+letSimp :: TTerm -> TTerm
+letSimp = varChanger 0 (\ _ p x -> V p (Free x)) (\ n p i -> if i < n then V p (Bound i) else V p (Bound (i - 1)))

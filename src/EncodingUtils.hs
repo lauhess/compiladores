@@ -1,4 +1,4 @@
-module EncodingUtils(Byte, int2bs, bs2int) where
+module EncodingUtils(Byte, int2bs, bs2int, skipBs) where
 import Data.Binary
 import Data.Bits
 
@@ -49,3 +49,12 @@ bs2int = decodeBs 0 0
       if x .&. cont == 0
         then ( combine acc x shift', xs )
         else decodeBs ( combine acc x shift' ) (shift' + 7) xs
+
+
+
+skipBs :: [Byte] -> ([Byte], [Byte])
+skipBs [] = ([], [])
+skipBs (y:ys) = 
+  if y .&. cont == 0 
+  then ([y], ys)
+  else let (skipped, rest) = skipBs ys in (y:skipped, rest)
