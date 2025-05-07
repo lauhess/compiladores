@@ -1,0 +1,238 @@
+\documentclass[12pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish]{babel}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{enumitem}
+\usepackage[margin=1.5cm]{geometry}
+\usepackage{aligned-overset}
+\usepackage{enumitem}
+
+%------------  macros y entornos  -----------------
+\newcommand{\length}{\operatorname{length\  }}
+\DeclareMathOperator{\longJumpOp}{longJump}
+\newcommand{\longJump}[2]{\longJumpOp\ #1\ #2}
+\newcommand{\bcc}[1]{\mathsf{bcc}\ #1}
+\newcommand{\bctc}[1]{\mathsf{bctc}\ #1}
+\newcommand{\subst}[1]{\quad\text{\footnotesize\(\{#1\}\)}}
+\newcommand{\concat}{\mathbin{+\!\!+}}   % «+\!\!+» sin huecos extras
+\newtheorem{lemma}{Lema}
+\newtheorem{theorem}{Teorema}
+\theoremstyle{remark}
+\newtheorem*{remark}{Observación}
+%--------------------------------------------------
+\newcommand{\bccp}[1]{\mathsf{bcc}^{\prime}\ #1}
+\newcommand{\overeq}[1]{\overset{\mathrm{#1}}{=}}
+\newcommand{\overeqa}[1]{\overset{\mathrm{#1}}&{=}}
+\newcommand{\overlea}[1]{\overset{\mathrm{#1}}&{\le}}
+
+
+\begin{document}
+Para demostrar que el bytecode generado mediante la optimización de taillcall es efectivamente menor queremos mostrar que 
+\[
+  \length\!\bigl(\bcc{t}\bigr)\;\le\;
+  \length\!\bigl(\bccp{t}\bigr). \qquad  \texttt{t::TTerm}
+\]
+donde $\bcc{t}$ es el bytecode optimizado y $\bccp{t}$ el original, es decir, previa optimización con taillcall
+
+Antes de demostrar eso demostraremos el siguiente lema:
+\begin{lemma}
+Para todo $t : \mathrm{TTerm}$ se verifica
+\[
+  \length\bigl(\bctc{t}\bigr)\;\le\;
+  \length\bigl(\bcc{t}\bigr)+1.
+\]
+\end{lemma}
+
+\begin{proof}
+Inducción estructural sobre $t$.  \\
+
+\textbf{Caso base.}  
+$t$ construido con \texttt{V} o \texttt{Const}:
+\[
+  \length\!\bigl(\bctc{t}\bigr)
+   \overeq{def.bctc} \length\bigl(\bcc{t}\concat[\texttt{RETURN}]\bigr)
+   \overeq{length.(++)} \length\!\bigl(\bcc{t}\bigr)+1 .
+\]
+
+\textbf{Caso Inductivo.} 
+Sea $t$ un término cualquiera y supongamos la hipótesis inductiva (H.I)
+$\length \bctc{t'} \le\length \bcc{t'} +1$
+para todo sub‑término $t'\preccurlyeq t$.
+Analizamos cada constructor de \texttt{TTerm}:
+
+\begin{enumerate}[label=\textbf{(\alph*)},wide,topsep=4pt]
+%--------------------------------------------------
+\item \textbf{Aplicación}  
+      ($t=\texttt{App}\;\_\;t_1\,t_2$):
+\begin{align*}
+\length \bctc{t} \overeqa{def.bctc}\ \ \length (\bcc{t_1}\concat\bcc{t_2}\concat[\texttt{RETURN}]) \\
+ \overeqa{length.(++)}\length (\bcc{t_1}\concat\bcc{t_2})+1 \\
+ \overeqa{def.bcc}\ \ \length(\bcc{t})+1 .
+\end{align*}
+
+%--------------------------------------------------
+\item \textbf{Condicional cero}  
+      ($t=\texttt{IfZ}\;\_\;c\;t_1\;t_2$).  
+      Sean $\ell_1=\length(\bctc{t_1})+2$, $\ell_1'=\length(\bcc{t_1})+2$, $\ell_2=\length(\bctc{t_2})$ y $\ell_2'=\length(\bcc{t_2})$:
+
+\begin{align*}
+\length(\bctc{t}) \overeqa{def.bctc} \ \ \length\!\bigl(\bcc{c}\concat
+    [\texttt{CJUMP},\ell_1]\concat
+    \longJump{(\bctc{t_1})}{{\ell_2}}\concat
+    [\texttt{JUMP},\ell_2]\concat
+    \bctc{t_2}\bigr) \\
+ \overeqa{length.(++)} \length(\bcc{c})+2+\length(\bctc{t_1})+2+\length(\bctc{t_2}) \\
+ \overlea{H.I.} \quad \  \length(\bcc{c})+2+\bigl(\length(\bcc{t_1})+1\bigr)+2+\bigl(\length(\bcc{t_2})+1\bigr) \\
+ \overeqa{length.(++)}  \length\!\bigl(\bcc{c}\concat
+    [\texttt{CJUMP},\ell_1']\concat
+    \longJump{(\bcc{t_1})}{{\ell_2'}}\concat
+    [\texttt{JUMP},\ell_2']\concat
+    \bcc{t_2}\bigr) \\
+ \overeqa{def.bcc} \ \ \; \length\bigl(\bcc{t}\bigr)+1
+\end{align*}
+
+
+%--------------------------------------------------
+\item \textbf{Let anidado}  
+      ($t=\texttt{Let}\;\_\;\_\;t_1\,(\texttt{Sc1 }t_2)$)\, con subcasos:
+
+\begin{enumerate}[label=\textbf{(\roman*)}, leftmargin=6em]
+  \item $t_2=\texttt{Print }\_\;s\;(\texttt{V }\_\;(\texttt{Bound }0))$
+  \begin{align*}
+      \length(\bctc{t}) \overeqa{def.bctc} \length\bigl(\bctc{(\texttt{Print }\_\;s\;t_1)}\bigr) \\ 
+      \overlea{H.I.} \ \ \length\bigl(\bcc{(\texttt{Print }\_\;s\;t_1)}\bigr)+1 \\
+      \overeqa{def.bcc} \  \length(\bcc{t})+1 
+  \end{align*}
+  
+  \item $t_2=\texttt{Let }i\;\_\;\_\;(\texttt{Print }\_\;s\;(\texttt{V }\_\;(\texttt{Bound }0)))\,(\texttt{Sc1 }t_3)$
+  \begin{align*}
+  \length(\bctc{t})
+     \overeqa{def.bctc} \ \length\!\bigl(
+         \bcc{(\texttt{Print }i\,s\;t_1)}\concat
+         [\texttt{SHIFT}]\concat
+         \bctc{(\texttt{letSimp }t_3)}
+       \bigr) \\
+     \overeqa{length.++} \length\!\bigl(\bcc{(\texttt{Print }i\,s\;t_1)}\bigr)+1+
+       \length\!\bigl(\bctc{(\texttt{letSimp }t_3)}\bigr)        \\
+     \overlea{H.I.} \quad \length\!\bigl(\bcc{(\texttt{Print }i\,s\;t_1)}\bigr)+1+
+        \bigl(\length(\bcc{(\texttt{letSimp }t_3)})+1\bigr)      \\
+     \overeqa{length.++} \length\!\bigl(
+         \bcc{(\texttt{Print }i\,s\;t_1)}\concat
+         [\texttt{SHIFT}]\concat
+         \bcc{(\texttt{letSimp }t_3)} 
+       \bigr) + 1\\
+     \overeqa{def.bcc} \ \  \length(\bcc{t})+1
+  \end{align*}
+
+  \item $t_2=\texttt{V }\_\;(\texttt{Bound }0)$
+  \begin{align*}
+        \length(\bctc{t}) \overeqa{def.bctc} \length(\bctc{t_1}) \\ 
+        \overlea{H.I.} \ \  \length(\bcc{t_1})+1 \\
+        \overeqa{def.bcc} \length(\bcc{t})+1
+  \end{align*}
+
+
+  \item \emph{Resto de subcasos}  
+        \begin{align*}
+            \length(\bctc{t}) \overeqa{def.bctc} \length(\bcc{t}) \\
+            \overlea{} \quad \length(\bcc{t}) + 1
+        \end{align*}
+\end{enumerate}
+\end{enumerate}
+
+\end{proof}
+
+\begin{remark}
+Se usa que  
+$\length\bigl(\text{longJump }xs\,j\bigr)=\length(xs)$,  
+demostrable por inducción en la lista $xs$.
+\end{remark}
+
+\begin{theorem}
+Para todo $t :: \mathrm{TTerm}$ se cumple
+\[
+  \length\!\bigl(\bcc{t}\bigr)\;\le\;
+  \length\!\bigl(\bccp{t}\bigr).
+\]
+\end{theorem}
+
+\begin{proof}
+Por inducción estructural sobre \texttt{TTerm}.
+
+\paragraph{Caso base.}
+Cuando $t$ es construido con \texttt{V} o \texttt{Const}, ambas
+implementaciones son idénticas, así que la desigualdad es trivial.
+
+\paragraph{Paso inductivo.}
+Supongamos como hipotesis inductiva (H.I.) que
+\[
+\length\bigl(\bcc{t'}\bigr)\le\length\bigl(\bccp{t'}\bigr)
+\]
+para todo sub‑término $t'\preccurlyeq t$.
+Solo hay que tratar los constructores modificados; los restantes son
+idénticos en ambas versiones.
+
+\begin{enumerate}[label=\textbf{(\alph*)},wide,topsep=4pt]
+%--------------------------------------------------
+\item \textbf{Expresiones lambda}  
+      ($t=\texttt{Lam}\;\_\;\_\;\_\;(\texttt{Sc1 }t_1)$)
+\begin{align*}
+\length\!\bigl(\bcc{t}\bigr)
+  \overeqa{def.bcc}
+    \quad \length\!\Bigl([\texttt{FUNCTION},\length\!\bigl(\bctc{t_1}\bigr)]
+                   \concat\bctc{t_1}\Bigr)\\
+  \overeqa{length.(++)} 
+    2+\length\!\bigl(\bctc{t_1}\bigr)\\
+  \overlea{Lema\,1} \ \ 
+    2+\bigl(\length\!\bigl(\bcc{t_1}\bigr)+1\bigr)\\
+   \overeqa{} \quad \ 2 + 1 + \length\!\bigl(\bcc{t_1}\bigr) \\
+  \overeqa{length.(++)}
+    \length\!\Bigl([\texttt{FUNCTION},\length\!\bigl(\bcc{t_1}\bigr)]
+                   \concat[\texttt{RETURN}]\Bigr)+
+    \length\!\bigl(\bcc{t_1}\bigr)\\
+  \overlea{H.I.} \quad \ 
+      \length\!\Bigl([\texttt{FUNCTION},\length\!\bigl(\bcc{t_1}\bigr)]
+                   \concat[\texttt{RETURN}]\Bigr)+
+    \length\!\bigl(\bccp{t_1}\bigr)\\
+    \overeqa{} \quad \ \length\!\Bigl([\texttt{FUNCTION},\length\!\bigl(\bcc{t_1}\bigr)]
+                   \concat\bccp{t_1}\concat[\texttt{RETURN}]\Bigr)\\
+  \overeqa{def.\bccp} \ \ 
+    \length\!\bigl(\bccp{t}\bigr).
+\end{align*}
+%--------------------------------------------------
+\item \textbf{Recursión mediante punto fijo}  
+      ($t=\texttt{Fix}\;\_\;\_\;\_\;\_\;\_\;(\texttt{Sc2 }t_1)$)
+\begin{align*}
+\length\!\bigl(\bcc{t}\bigr)
+  \overeqa{def.bcc} \ \ 
+    \length\!\Bigl([\texttt{FUNCTION},\length\!\bigl(\bctc{t_1}\bigr)]
+                   \concat\bctc{t_1}\concat[\texttt{FIX}]\Bigr)\\
+  \overeqa{length.(++)}
+    2+\length\!\bigl(\bctc{t_1}\bigr)\\
+  \overlea{Lema\,1} \ \ \;
+    2+\bigl(\length\!\bigl(\bcc{t_1}\bigr)+1\bigr)\\
+  \overeqa{length.(++)} 
+    \length\!\Bigl([\texttt{FUNCTION},\length\!\bigl(\bcc{t_1}\bigr)]
+                   \concat[\texttt{FIX}]
+                   \concat[\texttt{RETURN}]\Bigr)+
+    \length\!\bigl(\bcc{t_1}\bigr)\\
+  \overlea{H.I.} \quad \ 
+      \length\!\Bigl([\texttt{FUNCTION},\length\!\bigl(\bcc{t_1}\bigr)]
+                   \concat[\texttt{FIX}]
+                   \concat[\texttt{RETURN}]\Bigr)+
+    \length\!\bigl(\bccp{t_1}\bigr)\\
+    \overeqa{}\quad \ \; \length\!\Bigl([\texttt{FUNCTION},\length\!\bigl(\bcc{t_1}\bigr)]
+                   \concat\bccp{t_1}
+                   \concat[\texttt{FIX}]
+                   \concat[\texttt{RETURN}]\Bigr)\\
+  \overeqa{def.\bccp} \ \;
+    \length\!\bigl(\bccp{t}\bigr).
+\end{align*}
+\end{enumerate}
+
+Como todos los casos (modificados o no) satisfacen la cota,
+la proposición es válida para todo $t$.
+\end{proof}
+
+\end{document}
