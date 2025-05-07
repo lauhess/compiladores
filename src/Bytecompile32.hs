@@ -28,10 +28,8 @@ import Data.List (intercalate)
 import Data.Char
 import Eval (semOp)
 import Subst
-import PPrint (pp)
 import Global (Statistics(..), GlEnv (statistics))
 import Optimization (optimizeTerm)
-import Control.Monad
 import GHC.Base (when) -- Para CI
 
 type Opcode = Int
@@ -160,14 +158,6 @@ bcc t = case t of
     b2 <- bcc t2
     let len = length b2
     return $ bc ++ [CJUMP, length b1 + 2] ++ longJump b1 len ++ [JUMP, len] ++ b2
-    -- [c, JUMP, l1, x1, x2, ..., xn, JUMP, l2, y1, y2, ..., ym]
-    --  0, 1,     2, 2 + 1, 2 + 2, 2 + n, 2 + n + 1, 2+n+2,2+n+m]   
-    -- - Si c == 1, seguimos ejecutando en la vm, 
-    --   luego llegaremos a un JUMP que indica el comienzo del "else" 
-    --   que obviamente saltearemos
-    -- - Sino, hacemos un salto de n + 1 (JUMP y el largo de b1), y ejecutamos
-    --   la condición del else.
-    -- ToDo: Pensar casos de ifz anidados
   Let i' _ _ t1 (Sc1 t2) -> case t2 of
     (Print _ s (V _ (Bound 0))) -> bcc (Print i' s t1)
     Let i _ _ (Print _ s (V _ (Bound 0))) (Sc1 t3) -> do
@@ -218,12 +208,12 @@ bc2string = map chr
 
 optimizeBytecode :: Bytecode -> Bytecode
 optimizeBytecode []               = []
-optimizeBytecode (CONST:i:xs)     = CONST:i:(optimizeBytecode xs)
-optimizeBytecode (ACCESS:i:xs)    = ACCESS:i:(optimizeBytecode xs)
-optimizeBytecode (FUNCTION:i:xs)  = FUNCTION:i:(optimizeBytecode xs)
-optimizeBytecode (CJUMP:i:xs)     = CJUMP:i:(optimizeBytecode xs)
-optimizeBytecode (JUMP:i:xs)      = JUMP:i:(optimizeBytecode xs)
-optimizeBytecode (PRINT:xs)       =  
+optimizeBytecode (CONST:i:xs)     = CONST:i:optimizeBytecode xs
+optimizeBytecode (ACCESS:i:xs)    = ACCESS:i:optimizeBytecode xs
+optimizeBytecode (FUNCTION:i:xs)  = FUNCTION:i:optimizeBytecode xs
+optimizeBytecode (CJUMP:i:xs)     = CJUMP:i:optimizeBytecode xs
+optimizeBytecode (JUMP:i:xs)      = JUMP:i:optimizeBytecode xs
+optimizeBytecode (PRINT:xs)       =
   let (str, rest) = span (/=NULL) xs
   in PRINT:(str ++ optimizeBytecode rest)
 optimizeBytecode (DROP:xs)        =
@@ -234,18 +224,12 @@ optimizeBytecode (DROP:xs)        =
     xs'            -> DROP:xs'
 optimizeBytecode (x:xs)           = x : optimizeBytecode xs
 
-
-
 bytecompileModule :: MonadFD4 m => Module -> m Bytecode
--- bytecompileModule m = bytecompileModule' m []
 bytecompileModule [] = return [STOP]
--- bytecompileModule m = bcc (decl2term m) >>= (\bc -> return (bc ++ [STOP]))
 bytecompileModule m@((Decl info name ty _):_) = do
     let t' = decl2term m
     opt <- getOpt
     t <- if opt then optimizeTerm t' else return t'
-    pt <- pp t -- BOrrame
-    printFD4 pt
     bc <- bcc t
     let optBC = optimizeBytecode bc
     return (optBC ++ [STOP])
@@ -315,7 +299,6 @@ runBC' bs e s = showState bs e s  >> incOpCount >> incOpMaxPilaSize s >> case bs
                       in runBC' cg (v : eg) s'
   (x:xs)          -> failFD4 $ "opcode desconocido: " ++ show x
 
-
 liverator :: TTerm -> TTerm
 liverator   v@(V p (Bound i)) = v
 liverator   v@(V p (Free x)) = v
@@ -368,12 +351,12 @@ longJump (CONST:i:xs) j     = CONST:i:longJump xs j
 longJump (ACCESS:i:xs) j    = ACCESS:i:longJump xs j
 longJump (FUNCTION:i:xs) j  = FUNCTION:i:longJump xs j
 longJump (CJUMP:i:xs) j     = CJUMP:i:longJump xs j
-longJump (PRINT:xs) j       = 
+longJump (PRINT:xs) j       =
   let (str, rest) = span (/=NULL) xs
   in PRINT:(str++longJump rest j)
 longJump (JUMP:n:xs) j = if length xs == n
-                        then JUMP:(n+j+2):(longJump xs j) -- El +2 es para coontar la instrucción JUMP [len]
-                        else JUMP:n:(longJump xs j)
+                        then JUMP:(n+j+2):longJump xs j -- El +2 es para coontar la instrucción JUMP [len]
+                        else JUMP:n:longJump xs j
 longJump (x:xs) j = x : longJump xs j
 
 letSimp :: TTerm -> TTerm

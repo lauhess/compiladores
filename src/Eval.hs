@@ -63,6 +63,5 @@ eval (IfZ p c t e) = do
 eval (Let _ _ _ m n) = do
     v <- eval m
     eval (subst v n)
-
--- nada más para reducir
+-- Nada más para reducir
 eval t = return t

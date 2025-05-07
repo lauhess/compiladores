@@ -82,12 +82,6 @@ elab' env (SFix info [] _) =
 elab' env (SFix info [(_, _)] _) = 
   failFD4 "SFix with single element list is not allowed"
 
--- elab' _ _ = undefined
-  -- elabLet p recursive (head bs) (tail def) def body
-  -- case (recursive, bs) of 
-  --   (False, [(v, vty)]) -> Let p v vty (elab' env def) (close v (elab' (v:env) body))
-  --   (False, [(v, vty):bs]) -> Let p v vty (elab' env def) (close v (elab' (v:env) body))
-
 ---------------------
 {- Resolucion Let -}
 ---------------------
@@ -187,15 +181,12 @@ elabDecl (SDeclTy pos s sty) = do                       -- Nueva declaracion de 
         addName (FunTy _ t1 t2) = FunTy s t1 t2
         addName (NatTy _) = NatTy s
 elabDecl (SDecl _ False [] _) = 
-  failFD4 "Empty non-recursive declaration is not allowed"
+  failFD4 "No se permite una declaración no recursiva vacía"
 elabDecl (SDecl _ True [] _) = 
-  failFD4 "Empty recursive declaration is not allowed"
+  failFD4 "No se permite una declaración recursiva vacía"
 elabDecl (SDecl _ True [(_, _)] _) = 
-  failFD4 "Recursive declaration with single element is not allowed"
--- ToDo: Revisar este caso let rec (fact : Nat -> Nat) =  fun (x:Nat) -> ifz x then 1 else fact (x-1)
+  failFD4 "No se permite una declaración recursiva con un único elemento"
 
--- elabDecl s = failFD4 $ "No se pudo elaborar la declaración " ++ show s
--- fix (f : τ) (x : τ) . t
 elabClose :: MonadFD4 m => Name -> [Name] -> STerm -> m (Scope Pos Var)
 elabClose x env term = do
   t <- elab' (x:env) term

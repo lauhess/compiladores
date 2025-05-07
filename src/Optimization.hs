@@ -74,21 +74,6 @@ optimizeTerm :: MonadFD4 m => TTerm -> m TTerm
 optimizeTerm t = do
   prof <- getProf
   foldrM ($) t os
-  -- return $ Decl i name ty t'
-  -- go prof t 0 
--- >>= \t' -> 
-  -- printFD4 (show t') >> 
-  -- return t'
-    -- where
-    --     go :: MonadFD4 m => Bool -> TTerm -> Int -> m TTerm
-    --     go prof tm i = do 
-    --       ft <- foldrM ($) tm os
-    --       if compTTerm t ft || i >= iterations
-    --         then (if prof 
-    --           then printFD4 ("\tSe hicieron " ++ show i ++ " iteraciones de optimizacion") >> pp ft >>= printFD4 >> return ft 
-    --           else return ft)
-    --         else go prof ft (i+1)
-
 
 constantPropagation :: MonadFD4 m => TTerm -> m TTerm
 constantPropagation t = case t of
@@ -265,4 +250,4 @@ isPure (Let p v vty m (Sc1 o)) = do
   return $ b1 && b2
 
 isImpure :: MonadFD4 m => TTerm -> m Bool
-isImpure t = isPure t >>= \b -> return $ not b
+isImpure = fmap not . isPure

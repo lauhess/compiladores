@@ -102,8 +102,15 @@ freeName prefix = do
     put $ n + 1
     return (prefix ++ "_" ++  show n)
 
+-- Genera las declaraciones de variables para las variables libres del cuerpo,
+-- es decir, los argumentos de la función que se está cerrando.
+-- Así nos quedan una serie de declaraciones de variables que acceden al i-ésimo 
+-- elemento de la clausura.
 args2vars :: [(Name, Ty)] -> Ir -> Name -> Ir
-args2vars fv t closure =
-    foldr   (\((v, ty), i) ir -> IrLet v (convertType ty) (IrAccess (IrVar closure) (convertType ty) i) ir)
-            t
-            (zip fv [1..])
+args2vars fv t closure = go 1 fv
+  where
+    go _ [] = t
+    go i ((v, ty):rest) =
+      IrLet v (convertType ty)
+             (IrAccess (IrVar closure) (convertType ty) i)
+             (go (i + 1) rest)

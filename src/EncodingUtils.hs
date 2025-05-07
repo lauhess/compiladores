@@ -50,8 +50,9 @@ bs2int = decodeBs 0 0
         then ( combine acc x shift', xs )
         else decodeBs ( combine acc x shift' ) (shift' + 7) xs
 
-
-
+-- Función auxiliar para dividir la lista de bytes en dos partes:
+-- La primera contiene los bytes correspondientes a la longitud codificada como LEB128
+-- y la segunda contiene el resto del bytecode.
 skipBs :: [Byte] -> ([Byte], [Byte])
 skipBs [] = ([], [])
 skipBs (y:ys) = 

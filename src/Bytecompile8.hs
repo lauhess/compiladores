@@ -261,59 +261,37 @@ bc2string = T.unpack . E.decodeUtf8 . BSS.pack
 
 -- ToDo: Pese a que funciona sin obtener el tamaño correcto de i habría que ser consistentes
 optimizeBytecode :: Bytecode -> Bytecode
-optimizeBytecode [] = []
--- optimizeBytecode (NULL:xs)        = 
--- optimizeBytecode (RETURN:xs)      = 
-optimizeBytecode (CONST:xs)     =
-  -- CONST:i:(optimizeBytecode xs)
-  let (num, xs') = skipBs xs
-  in CONST:num ++ (optimizeBytecode xs')
-optimizeBytecode (ACCESS:xs)    =
-  -- ACCESS:i:(optimizeBytecode xs)
-  let (num, xs') = skipBs xs
-  in ACCESS:num ++ (optimizeBytecode xs')
-optimizeBytecode (FUNCTION:xs)    =
-  -- FUNCTION:i:(optimizeBytecode xs)
-  let (num, xs') = skipBs xs
-  in FUNCTION:num ++ (optimizeBytecode xs')
-optimizeBytecode (CJUMP:xs)       =
-  -- CJUMP:i:xs
-  let (num, xs') = skipBs xs
-  in CJUMP:num ++ (optimizeBytecode xs')
-optimizeBytecode (JUMP:xs)      =
-  -- JUMP:i:(optimizeBytecode xs)
-  let (num, xs') = skipBs xs
-  in JUMP:num ++ (optimizeBytecode xs')
-optimizeBytecode (PRINT:xs)      =
-  let (str, rest) = span (/=NULL) xs
-  in PRINT:str ++ (optimizeBytecode rest)
-optimizeBytecode (DROP:xs)        =
-  case optimizeBytecode xs of
-    []             -> []
-    xs'@(RETURN:_) -> xs'
-    xs'@[STOP]     -> xs'
-    xs'            -> DROP:xs'
-optimizeBytecode (x:xs)           = x : optimizeBytecode xs
+optimizeBytecode bs = case bs of
+  [] -> []
+  (CONST:xs)    -> skipAndOptimize CONST xs
+  (ACCESS:xs)   -> skipAndOptimize ACCESS xs
+  (FUNCTION:xs) -> skipAndOptimize FUNCTION xs
+  (CJUMP:xs)    -> skipAndOptimize CJUMP xs
+  (JUMP:xs)     -> skipAndOptimize JUMP xs
+  (PRINT:xs)    ->
+    case span (/= NULL) xs of
+      (str, rest) -> PRINT : str ++ optimizeBytecode rest
+  (DROP:xs)     ->
+    case optimizeBytecode xs of
+      []             -> []
+      xs'@(RETURN:_) -> xs'
+      xs'@[STOP]     -> xs'
+      xs'            -> DROP : xs'
+  (x:xs)        -> x : optimizeBytecode xs
+  where
+    skipAndOptimize op xs' =
+      case skipBs xs' of
+        (num, rest) -> op : num ++ optimizeBytecode rest
 
 bytecompileModule :: MonadFD4 m => Module -> m Bytecode
--- bytecompileModule m = bytecompileModule' m []
 bytecompileModule [] = return [STOP]
--- bytecompileModule m = bcc (decl2term m) >>= (\bc -> return (bc ++ [STOP]))
--- bytecompileModule m = do
 bytecompileModule m@((Decl info name ty _):_) = do
-
     let t' = decl2term m
     opt <- getOpt
-    -- t <- if opt then optimizeTerm t' else return t'
     t <- if opt then optimizeTerm t' else return t'
-
     pt <- pp t
-    printFD4 pt
     bc <- bcc t
-    printFD4 $ "Bytecode: " ++ showBC bc
     let optBC = optimizeBytecode bc
-    printFD4 $ "Bytecode: " ++ showBC optBC
-    -- printFD4 $ intercalate "\n" $ showOps bc
     return (optBC ++ [STOP])
 
 decl2term :: Module -> TTerm
@@ -347,14 +325,10 @@ runBC' bs e s = printVals bs e s >> incOpCount >> incOpMaxPilaSize s >> case bs 
   (NULL:xs)       -> runBC' xs e s
   (RETURN:xs)     -> let (val : RA e' bs' : s') = s
                       in runBC' bs' e' (val : s')
-  --(CONST:i:xs)    -> runBC' xs e (I i:s)
   (CONST:xs)      -> let (n, xs') = bs2int xs
                       in runBC' xs' e (I n : s)
-  --(ACCESS:i:xs)   -> runBC' xs e ( e !! i  : s)
   (ACCESS:xs)     -> let (n, xs') = bs2int xs
                       in runBC' xs' e (e !! n : s)
-  --(FUNCTION:i:xs) -> let bs' = take i xs
-  --                    in incOpClaus >> runBC' (drop i xs) e (Fun e bs' : s)
   (FUNCTION:xs)   -> let (n, xs') = bs2int xs
                       in incOpClaus >> runBC' (drop n xs') e (Fun e (take n xs') : s)
   (CALL:xs)       -> let (v: (Fun ef cf) : s') = s
@@ -367,16 +341,11 @@ runBC' bs e s = printVals bs e s >> incOpCount >> incOpMaxPilaSize s >> case bs 
                          efix      = Fun efix bc : e
                       in incOpClaus >> runBC' xs e (Fun efix bc : s')
   (STOP:xs)       -> return (head s)
-  --(CJUMP:i:xs)    -> let (I c : s') = s
-  --                    in case c of
-  --                        0 -> runBC' xs e s'
-  --                        _ -> runBC' (drop i xs) e s'
   (CJUMP:xs)      -> let (n, xs')   = bs2int xs
                          (I c : s') = s
                       in case c of
                           0 -> runBC' xs' e s'
                           _ -> runBC' (drop n xs') e s'
-  --(JUMP:i:xs)     -> runBC' (drop i xs) e s
   (JUMP:xs)     -> let (n, xs') = bs2int xs
                     in runBC' (drop n xs') e s
   (SHIFT:xs)      -> runBC' xs (head s : e) (tail s)
@@ -436,36 +405,24 @@ incOpMaxPilaSize stack = gets statistics >>= \case
   _ -> return ()
 
 longJump :: Bytecode -> Int -> Bytecode
-longJump [] _ = []
-longJump (CONST:xs) j    =
-  -- CONST:i:(longJump xs)
-  let (num, xs') = skipBs xs
-  in CONST:num ++ (longJump xs' j)
-longJump (ACCESS:xs) j   =
-  -- ACCESS:i:(longJump xs)
-  let (num, xs') = skipBs xs
-  in ACCESS:num ++ (longJump xs' j)
-longJump (FUNCTION:xs) j   =
-  -- FUNCTION:i:(longJump xs)
-  let (num, xs') = skipBs xs
-  in FUNCTION:num ++ (longJump xs' j)
-longJump (CJUMP:xs) j      =
-  -- CJUMP:i:xs
-  let (num, xs') = skipBs xs
-  in CJUMP:num ++ (longJump xs' j)
-longJump (JUMP:n:xs) j =
-  -- if length xs == n
-  -- then JUMP:(n+j+2):(longJump xs j) -- El +2 es para coontar la instrucción JUMP [len]
-  -- else JUMP:n:(longJump xs j)
-  let (num, xs') = skipBs xs
-      (num', _) = bs2int num
-  in if length xs' == num'
-     then JUMP:int2bs (num'+j+1)++(longJump xs' j) -- El +1 es para coontar la instrucción JUMP
-     else JUMP:num ++ (longJump xs' j)
-longJump (PRINT:xs) j     =
-  let (str, rest) = span (/=NULL) xs
-  in PRINT:str ++ (longJump rest j)
-longJump (x:xs) j          = x : longJump xs j
+longJump bs j = case bs of
+  [] -> []
+  (CONST:xs) -> CONST : skipAndJump xs
+  (ACCESS:xs) -> ACCESS : skipAndJump xs
+  (FUNCTION:xs) -> FUNCTION : skipAndJump xs
+  (CJUMP:xs) -> CJUMP : skipAndJump xs
+  (JUMP:n:xs) ->
+    let (num, xs') = skipBs xs
+        (num', _) = bs2int num
+    in if length xs' == num'
+         then JUMP : int2bs (num' + j + 1) ++ longJump xs' j
+         else JUMP : num ++ longJump xs' j
+  (PRINT:xs) ->
+    let (str, rest) = span (/= NULL) xs
+    in PRINT : str ++ longJump rest j
+  (x:xs) -> x : longJump xs j
+  where
+    skipAndJump xs = let (num, xs') = skipBs xs in num ++ longJump xs' j
 
 letSimp :: TTerm -> TTerm
 letSimp = varChanger 0 (\ _ p x -> V p (Free x)) (\ n p i -> if i < n then V p (Bound i) else V p (Bound (i - 1)))

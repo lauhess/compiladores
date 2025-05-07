@@ -26,7 +26,7 @@ import Data.Maybe ( fromMaybe, isJust )
 
 import System.Exit ( exitWith, ExitCode(ExitFailure) )
 import Options.Applicative
-import GHC.Base ( when, sequence )
+import GHC.Base ( sequence )
 
 import Global
 import Errors
