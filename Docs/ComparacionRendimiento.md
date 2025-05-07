@@ -3,7 +3,7 @@
 
 | Tipo de ejecución                         | Tiempo promedio (ms) | Desviación estándar (ms) |
 |------------------------------------------|----------------------|--------------------------|
-| Eval simple                              | 9776.0 | 81|
+| Eval simple                              | 9776.0              | 81.0                     |
 | CC                                       | 130.4               | 3.1                      |
 | Bytecode 32 bit                          | 229.7               | 5.4                      |
 | Bytecode 8 bit                           | 272.5               | 5.7                      |
