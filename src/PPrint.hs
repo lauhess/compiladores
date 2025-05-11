@@ -242,9 +242,42 @@ render = unpack . renderStrict . layoutSmart defaultLayoutOptions
 ppDecl :: MonadFD4 m => Decl TTerm -> m String
 ppDecl (Decl p x xty t) = do
   gdecl <- gets glb
-  return (render $ sep [defColor (pretty "let")
-                       , name2doc x
-                       , defColor (pretty "=")]
-                   <+> nest 2 (t2doc False (openAll fst (map declName gdecl) t)))
+  let sterm = (openAll fst (map declName gdecl) t) 
+      (variables, cuerpo) = sacarVars x p sterm
+      variablesDecoradas = map binding2doc variables
+      esrec = esRec sterm
+      hola = defColor (pretty "let"): esrec ++ name2doc x : variablesDecoradas ++ [defColor (pretty "=")]
+  return (render $ sep hola
+                   <+> nest 2 (t2doc False cuerpo))
 
+esRec :: STerm -> [Doc AnsiStyle]
+esRec (SFix _ _ _) = [defColor (pretty "rec")]
+esRec _ = []
 
+sacarVars :: Name -> Pos -> STerm -> ([(Name, SType)], STerm)
+sacarVars _ posDecl l@(SLam posLam vars cuerpo) = 
+    if posLam == posDecl
+    then (vars,cuerpo)
+    else ([], l)
+sacarVars nameDecl posDecl l@(SFix posLam vars cuerpo) = 
+    if posLam == posDecl
+    then let
+      (name, _) = head vars
+      cuerpo' = cambiarNobre nameDecl name cuerpo
+      in (tail vars,cuerpo')
+    else ([], l)
+sacarVars _ _ p = ([], p) 
+
+cambiarNobre:: Name -> Name -> STerm -> STerm
+cambiarNobre destino origen (SV p x) = SV p (if x == origen then destino else x)
+cambiarNobre destino origen c@(SConst _ _) = c
+cambiarNobre destino origen (SLam p vars cuerpo) = 
+    SLam p (map (\(x,ty) -> (if x == origen then destino else x, ty)) vars) (cambiarNobre destino origen cuerpo)
+cambiarNobre destino origen (SApp p t u) = SApp p (cambiarNobre destino origen t) (cambiarNobre destino origen u)
+cambiarNobre destino origen (SPrint p str t) = SPrint p str (cambiarNobre destino origen t)
+cambiarNobre destino origen (SIfZ p c t e) = SIfZ p (cambiarNobre destino origen c) (cambiarNobre destino origen t) (cambiarNobre destino origen e)
+cambiarNobre destino origen (SBinaryOp p op t u) = SBinaryOp p op (cambiarNobre destino origen t) (cambiarNobre destino origen u)
+cambiarNobre destino origen (SFix p vars cuerpo) = 
+    SFix p (map (\(x,ty) -> (if x == origen then destino else x, ty)) vars) (cambiarNobre destino origen cuerpo)
+cambiarNobre destino origen (SLet p bool vars t t') =
+    SLet p bool (map (\(x,ty) -> (if x == origen then destino else x, ty)) vars) (cambiarNobre destino origen t) (cambiarNobre destino origen t')
