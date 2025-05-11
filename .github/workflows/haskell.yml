@@ -38,7 +38,7 @@ jobs:
         make vm
 
     - name: Run tests
-      run: make test_all
+      run: make test_all -j
 
     - name: Run benchmarks
       run: tests/bench/benchmark.sh
