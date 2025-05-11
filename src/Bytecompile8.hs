@@ -296,10 +296,10 @@ bytecompileModule m@((Decl info name ty _):_) = do
     return (optBC ++ [STOP])
 
 decl2term :: Module -> TTerm
-decl2term [Decl info x ty t] = liverator t
+decl2term [Decl info x ty t] = freeTerm t
 decl2term ((Decl info x ty t):ds) =
   let ts = decl2term ds
-      t' = liverator t
+      t' = freeTerm t
       body = close x ts
   in Let (info, ty) x ty t' body
 decl2term [] = undefined
@@ -359,18 +359,18 @@ runBC' bs e s = printVals bs e s >> incOpCount >> incOpMaxPilaSize s >> case bs 
                       in runBC' cg (v : eg) s'
   (x:xs)          -> failFD4 $ "opcode desconocido: " ++ show x
 
-liverator :: TTerm -> TTerm
-liverator   v@(V p (Bound i)) = v
-liverator   v@(V p (Free x)) = v
-liverator   (V p (Global x)) = V p (Free x)
-liverator (Lam p y ty (Sc1 t))   = Lam p y ty (Sc1 (liverator t))
-liverator (App p l r)   = App p (liverator l) (liverator r)
-liverator (Fix p f fty x xty (Sc2 t)) = Fix p f fty x xty (Sc2 (liverator t))
-liverator (IfZ p c t e) = IfZ p (liverator c) (liverator t) (liverator e)
-liverator t@(Const _ _) = t
-liverator (Print p str t) = Print p str (liverator t)
-liverator (BinaryOp p op t u) = BinaryOp p op (liverator t) (liverator u)
-liverator (Let p v vty m (Sc1 o)) = Let p v vty (liverator m) (Sc1 (liverator o))
+freeTerm :: TTerm -> TTerm
+freeTerm   v@(V p (Bound i)) = v
+freeTerm   v@(V p (Free x)) = v
+freeTerm   (V p (Global x)) = V p (Free x)
+freeTerm (Lam p y ty (Sc1 t))   = Lam p y ty (Sc1 (freeTerm t))
+freeTerm (App p l r)   = App p (freeTerm l) (freeTerm r)
+freeTerm (Fix p f fty x xty (Sc2 t)) = Fix p f fty x xty (Sc2 (freeTerm t))
+freeTerm (IfZ p c t e) = IfZ p (freeTerm c) (freeTerm t) (freeTerm e)
+freeTerm t@(Const _ _) = t
+freeTerm (Print p str t) = Print p str (freeTerm t)
+freeTerm (BinaryOp p op t u) = BinaryOp p op (freeTerm t) (freeTerm u)
+freeTerm (Let p v vty m (Sc1 o)) = Let p v vty (freeTerm m) (Sc1 (freeTerm o))
 
 inicializarStats :: MonadFD4 m => m ()
 inicializarStats = getProf >>= \case
