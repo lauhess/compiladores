@@ -48,10 +48,10 @@ printNextBytecode :: MonadFD4 m => Bytecode -> m ()
 printNextBytecode x = printFD4 $  "Next: " ++ intercalate "; " (showOps x)
 
 printEnv :: (MonadFD4 m, Show a) => [a] -> m ()
-printEnv e = printFD4 ( "Env: " ++ intercalate ", " (map show e))
+printEnv e = printFD4 $ "Env: " ++ intercalate ", " (map show e)
 
 printStack :: (MonadFD4 m, Show a1, Show a2) => [a1] -> [a2] -> m ()
-printStack e vs = printFD4 $  "Pila: " ++ intercalate ", " (map show e) ++ "\nPila: " ++ intercalate ", " (map show (take 10 vs)) ++ "\n"
+printStack e vs = printFD4 $ "Pila: " ++ intercalate ", " (map show (take 10 vs)) ++ "\n"
 
 printVals' :: MonadFD4 m => Bytecode -> Env -> [Val] -> DebugOptions -> m ()
 printVals' x e vs opts =
@@ -136,9 +136,9 @@ showBC = intercalate "; " . showOps
 -- Compila un término a bytecode
 bcc :: MonadFD4 m => TTerm -> m Bytecode
 bcc t = case t of
-  V _ (Free _) -> failFD4 "implementame! (Bytecompile:114)"
+  V _ (Free _) -> failFD4 "Error inesperado: variable libre en bytecode"
   V _ (Bound i) -> return [ACCESS, i]
-  V _ (Global _) -> failFD4 "implementame! (Bytecompile:116)"
+  V _ (Global _) -> failFD4 "Error inesperado: variable global en bytecode"
   Const _ (CNat n) -> return [CONST, fromIntegral n]
   Lam _ _ _ (Sc1 t1) -> do
     bt <- bctc t1

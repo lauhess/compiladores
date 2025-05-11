@@ -70,10 +70,10 @@ printNextBytecode :: MonadFD4 m => Bytecode -> m ()
 printNextBytecode x = printFD4 $  "Next: " ++ intercalate "; " (showOps x)
 
 printEnv :: (MonadFD4 m, Show a) => [a] -> m ()
-printEnv e = printFD4 ( "Env: " ++ intercalate ", " (map show e))
+printEnv e = printFD4 $ "Env: " ++ intercalate ", " (map show e)
 
 printStack :: (MonadFD4 m, Show a1, Show a2) => [a1] -> [a2] -> m ()
-printStack e vs = printFD4 $  "Pila: " ++ intercalate ", " (map show e) ++ "\nPila: " ++ intercalate ", " (map show (take 10 vs)) ++ "\n"
+printStack e vs = printFD4 $ "Pila: " ++ intercalate ", " (map show (take 10 vs)) ++ "\n"
 
 printVals' :: MonadFD4 m => Bytecode -> Env -> [Val] -> DebugOptions -> m ()
 printVals' x e vs opts =
