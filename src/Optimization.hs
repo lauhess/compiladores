@@ -81,6 +81,7 @@ constantPropagation t = case t of
   Const i co -> return t
   Lam i s ty (Sc1 t1) -> constantPropagation t1 >>= \t1' ->
                          return $ Lam i s ty (Sc1 t1')
+  App i (Lam _ _ _ s) c@(Const {}) -> constantPropagation $ subst c s 
   App i t1 t2 -> constantPropagation t1 >>= \t1' ->
                  constantPropagation t2 >>= \t2' ->
                  return $ App i t1' t2'
