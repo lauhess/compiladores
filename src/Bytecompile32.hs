@@ -1,5 +1,4 @@
 {-# LANGUAGE PatternSynonyms #-}
-{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE LambdaCase #-}
 {-|
 Module      : Bytecompile
@@ -28,7 +27,7 @@ import Data.List (intercalate)
 import Data.Char
 import Eval (semOp)
 import Subst
-import Global (Statistics(..), GlEnv (statistics))
+import Global (Statistics(..), GlEnv (statistics), DebugOptions (..))
 import Optimization (optimizeTerm)
 import GHC.Base (when)      -- Para CI
 import Control.Monad (void) -- Para CI
@@ -45,13 +44,23 @@ instance Show Val where
   show (Fun _ b) = "Fun [" ++ showBC b ++ "]"
   show (RA _ b) = "RA [" ++ showBC b ++ "]"
 
--- ToDo: Modificar  para soportar varios modos de debug: Solo bytecode, solo pila, ambos, ninguno
--- Usar potencias dos para representar los modos de debug
-printVals :: MonadFD4 m => Bool -> Bytecode -> Env -> [Val] -> m ()
-printVals True x e vs = printFD4 $  "Next: " ++ intercalate "; " (showOps x)  ++
-                                   "\nEnv: " ++ intercalate ", " (map show e) ++
-                                   "\nPila: " ++ intercalate ", " (map show (take 10 vs)) ++ "\n"
-printVals False _ _ _ = return ()
+printNextBytecode :: MonadFD4 m => Bytecode -> m ()
+printNextBytecode x = printFD4 $  "Next: " ++ intercalate "; " (showOps x)
+
+printEnv :: (MonadFD4 m, Show a) => [a] -> m ()
+printEnv e = printFD4 ( "Env: " ++ intercalate ", " (map show e))
+
+printStack :: (MonadFD4 m, Show a1, Show a2) => [a1] -> [a2] -> m ()
+printStack e vs = printFD4 $  "Pila: " ++ intercalate ", " (map show e) ++ "\nPila: " ++ intercalate ", " (map show (take 10 vs)) ++ "\n"
+
+printVals' :: MonadFD4 m => Bytecode -> Env -> [Val] -> DebugOptions -> m ()
+printVals' x e vs opts =
+      when (enabledPrintBytecode opts) (printNextBytecode x)
+  >>  when (enablePrintEnv       opts) (printEnv e)
+  >>  when (enabledPrintStack    opts) (printStack e vs)
+
+printVals :: MonadFD4 m => Bytecode -> Env -> [Val] -> m ()
+printVals x e vs = getByteCodeDebugOptions >>= maybe (return ()) (printVals' x e vs)
 
 {- Esta instancia explica como codificar y decodificar Bytecode de 32 bits -}
 instance Binary Bytecode32 where
@@ -260,13 +269,8 @@ bcRead filename = (map fromIntegral <$> un32) . decode <$> BS.readFile filename
 runBC :: MonadFD4 m => Bytecode -> m ()
 runBC bc = void $ inicializarStats >> runBC' bc [] []
 
-showState :: MonadFD4 m => Bytecode -> Env -> [Val] -> m ()
-showState bc e s = do
-  opt <- getOpt
-  when opt $ printVals True bc e s
-
 runBC' :: MonadFD4 m => Bytecode -> Env -> [Val] -> m Val
-runBC' bs e s = showState bs e s  >> incOpCount >> incOpMaxPilaSize s >> case bs of
+runBC' bs e s = printVals bs e s >> incOpCount >> incOpMaxPilaSize s >> case bs of
   []              -> return (head s)
   (NULL:xs)       -> runBC' xs e s
   (RETURN:xs)     -> let (val : RA e' bs' : s') = s

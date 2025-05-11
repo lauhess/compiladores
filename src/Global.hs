@@ -64,7 +64,6 @@ data Mode =
     Interactive
   | Typecheck
   | Eval
-  | InteractiveCEK
   | EvalCEK
   | Bytecompile
   | Bytecompile8

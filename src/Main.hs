@@ -80,7 +80,6 @@ parseArgs = (\(a, opt, prof, cek) c -> (a, opt, prof, cek, c)) <$> parseMode <*>
 
 main :: IO ()
 main = execParser opts >>= \x@(a,b,c,d,_) ->
-  -- putStrLn ("Options: " ++ show a ++ show b ++ show c ++ show d) >> 
   go x
   where
     opts = info (parseArgs <**> helper)
@@ -90,23 +89,17 @@ main = execParser opts >>= \x@(a,b,c,d,_) ->
 
     --     Modo, optimizar, profiling, cek, archivos
     go :: (Mode,Bool,Bool,Bool,[FilePath]) -> IO ()
-    go (Interactive, opt, prof, True,files) =
-              runOrFail (Conf prof opt InteractiveCEK Nothing) (runInputT defaultSettings (repl files) >> mapM_ compileFile files)
     go (Interactive, opt, prof, False,files) =
-              runOrFail (Conf prof opt Interactive Nothing) (runInputT defaultSettings (repl files) >> mapM_ compileFile files)
-    -- go (Eval ,opt, prof, True,files) =
-    --           runOrFail (Conf prof opt EvalCEK) (runInputT defaultSettings (repl files) >>  mapM_ compileFile files)
-    -- go (Eval ,opt, prof, False, files) =
-    --           runOrFail (Conf prof opt Eval) (runInputT defaultSettings (repl files) >>  mapM_ compileFile files)
+              runOrFail (Conf prof opt Interactive Nothing) (runInputT defaultSettings (repl files) >> mapM_ compileFile files)    -- go (Eval ,opt, prof, True,files) =    --           runOrFail (Conf prof opt EvalCEK) (runInputT defaultSettings (repl files) >>  mapM_ compileFile files)    -- go (Eval ,opt, prof, False, files) =    --           runOrFail (Conf prof opt Eval) (runInputT defaultSettings (repl files) >>  mapM_ compileFile files)
     -- ToDo: Agregar soporte para personalizar opciones depuración
     go (Bytecompile, opt, prof, cek, files) =
               runOrFail (Conf prof opt Bytecompile Nothing) $ mapM_ (byteCompileFile BC32Bit)  files
     go (RunVM, opt, prof, cek, files) =
-              runOrFail (Conf prof opt RunVM defaultDebugOptions) $ mapM_ (byteRunVmFile BC32Bit) files
+              runOrFail (Conf prof opt RunVM (if prof then fullDebugOptions else defaultDebugOptions)) $ mapM_ (byteRunVmFile BC32Bit) files
     go (Bytecompile8, opt, prof, cek, files) =
               runOrFail (Conf prof opt Bytecompile8 Nothing) $ mapM_ (byteCompileFile BC8Bit)  files
     go (RunVM8, opt, prof, cek, files) =
-              runOrFail (Conf prof opt RunVM8 defaultDebugOptions) $ mapM_ (byteRunVmFile BC8Bit) files
+              runOrFail (Conf prof opt RunVM8 (if prof then fullDebugOptions else defaultDebugOptions)) $ mapM_ (byteRunVmFile BC8Bit) files
     go (CC, opt, prof, cek, files) =
               runOrFail (Conf prof opt CC Nothing) $ mapM_ ccCopileFile files
     go (m, opt, prof, cek, files) =
@@ -157,15 +150,15 @@ compileFile f = do
     setInter False
     when i $ printFD4 ("Abriendo "++f++"...")
     decls <- loadFile f
-    ds <- mapM aux decls
+    ds <- mapM processDecl decls
     opt <- getOpt
     let ds'' = map (\(Just d) -> d) $ filter isJust ds
     ds' <- if opt then optDecls ds'' else return ds''
     mapM_ handleDecl' ds'
     setInter i
 
-aux :: MonadFD4 m => SDecl STerm -> m (Maybe (Decl TTerm))
-aux x = do 
+processDecl :: MonadFD4 m => SDecl STerm -> m (Maybe (Decl TTerm))
+processDecl x = do 
     x1 <- elabDecl x
     case x1 of
       Nothing -> return Nothing
@@ -173,12 +166,6 @@ aux x = do
         x3 <- typecheckDecl x2
         addDecl x3
         return $ Just x3
-        -- handleDecl' x3
-
--- aux2 :: MonadFD4 m => Maybe (Decl TTerm) -> m ()
--- aux2 Nothing = return ()
--- aux2 (Just x) = handleDecl' x
-        
 
 byteCompileFile ::  MonadFD4 m => BytecodeType -> FilePath -> m ()
 byteCompileFile bt f = do
@@ -282,12 +269,6 @@ handleDecl' td@(Decl p x t tt) = do
           Eval -> do
               ed <- evalDecl td
               addDecl ed
-          InteractiveCEK -> do
-            v <- seek tt
-            let tt' = val2term v
-            let decl' = Decl p x t tt'
-            ppterm <- ppDecl decl'
-            addDecl $ Decl p x t $ val2term v
           EvalCEK -> do
             v <- seek tt
             let tt' = val2term v
@@ -400,7 +381,7 @@ compilePhrase ::  MonadFD4 m => String -> m ()
 compilePhrase x = do
     dot <- parseIO "<interactive>" declOrTm x
     case dot of
-      Left d  -> aux d >>= \case
+      Left d  -> processDecl d >>= \case
         Nothing -> return ()
         Just d' -> handleDecl' d'
       Right t -> handleTerm t
@@ -416,21 +397,13 @@ compilePhrase x = do
 
 handleTerm ::  MonadFD4 m => STerm -> m ()
 handleTerm t = do
-         m <- getMode
-         t' <- elab t
-         s <- get
-         tt <- tc t' (tyEnv s)
-         case m of
-          InteractiveCEK -> do
-            -- printFD4 "Evaluando sobre Máquina CEK"
-            v <- seek tt
-            let te = val2term v
-            ppte <- pp te
-            printFD4 (ppte ++ " : " ++ ppTy (getTy tt))
-          _ -> do
-            te <- eval tt
-            ppte <- pp te
-            printFD4 (ppte ++ " : " ++ ppTy (getTy tt))
+  m <- getMode
+  t' <- elab t
+  s <- get
+  tt <- tc t' (tyEnv s)
+  te <- eval tt
+  ppte <- pp te
+  printFD4 (ppte ++ " : " ++ ppTy (getTy tt))
 
 printPhrase   :: MonadFD4 m => String -> m ()
 printPhrase x =

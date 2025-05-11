@@ -10,7 +10,7 @@ Este módulo permite elaborar términos y declaraciones para convertirlas desde
 fully named (@STerm) a locally closed (@Term@)
 -}
 
-module Elab ( elab, elabDecl, decorar ) where
+module Elab ( elab, elabDecl ) where
 
 import Lang
 import Subst
@@ -203,57 +203,3 @@ makeType ((s,t):ts) vty = do
   ts' <- makeType ts vty
   t'  <- elabSTy t
   return $ FunTy "" t' ts'
-
----------------------
-{- re-sugar -}
----------------------
-
--- ToDo: Se podría borrar
-decorar :: MonadFD4 m => TTerm -> m STerm
-decorar (V (p,_) (Bound _)) = failFD4 "No se puede decorar un término con variables ligadas"
-decorar (V (p,_) (Free name)) = return $ SV p name
-decorar (V (p,_) (Global name)) = return $ SV p name
-decorar (Const (p,_) c) = return $ SConst p c
-decorar (Lam (p,_) v vty t) = do
-  vty' <- unElabTyM vty
-  t' <- decorar (open v t)
-  let (xs, res) = case t' of
-        (SLam p' xs' res') -> if p' == p then (xs', res') else ([], t')
-        _ -> ([], t')
-  return $ SLam p ((v,vty'):xs) res
-decorar (App (p,_) t u) = do
-  t' <- decorar t
-  u' <- decorar u
-  return $ SApp p t' u'
-decorar (IfZ (p,_) c t e) = do
-  c' <- decorar c
-  t' <- decorar t
-  e' <- decorar e
-  return $ SIfZ p c' t' e'
-decorar (BinaryOp (p,_) o t u) = do
-  t' <- decorar t
-  u' <- decorar u
-  return $ SBinaryOp p o t' u'
-decorar (Print (p,_) str t) = do
-  t' <- decorar t
-  return $ SPrint p str t'
-decorar (Let (p,_) v vty def body) = do
-  vty' <- unElabTyM vty
-  def' <- decorar def
-  body' <- decorar (open v body)
-  let (xs, res, bool) = case def' of
-        SLam p' xs' res' | p' == p -> (xs', res', False)
-        SFix p' (_:xs') res' | p' == p -> (xs', res', True)
-        _ -> ([], def', False)
-  return $ SLet p bool ((v,clearTy xs vty'):xs) res body'
-  where clearTy [] t = t
-        clearTy (_:xs) (SFunTy _ t) = clearTy xs t
-        clearTy _ _ = undefined
-decorar (Fix (p,_) f fty x xty t) = do
-  fty' <- unElabTyM fty
-  xty' <- unElabTyM xty
-  t' <- decorar (open2 f x t)
-  let (xs, res) = case t' of
-        (SLam p' xs' res') -> if p' == p then (xs', res') else ([], t')
-        _ -> ([], t')
-  return $ SFix p ((f,fty'):(x,xty'):xs) res
