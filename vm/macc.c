@@ -38,7 +38,7 @@ enum {
 	PRINTN   = 14,
 	JUMP     = 15,
 	TAILCALL = 16,
-	DISCARD = 17,
+	DISCARD  = 17,
 };
 
 #define quit(...)							\
@@ -169,6 +169,9 @@ void showOp(code cc){
 			break;}
 		case DROP:{
 			fprintf(stderr, "DROP; ");
+			break;}
+		case DISCARD:{
+			fprintf(stderr, "DISCARD; ");
 			break;}
 		case PRINT:{
 			fprintf(stderr, "PRINT; ");
