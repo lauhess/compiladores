@@ -105,6 +105,7 @@ pattern PRINT    = 13
 pattern PRINTN   = 14
 pattern JUMP     = 15
 pattern TAILCALL = 16
+pattern DISCARD = 17
 
 --función util para debugging: muestra el Bytecode de forma más legible.
 showOps :: Bytecode -> [String]
@@ -123,6 +124,7 @@ showOps (CJUMP:i:xs)     = ("CJUMP off=" ++ show i) : showOps xs
 showOps (JUMP:i:xs)      = ("JUMP off=" ++ show i) : showOps xs
 showOps (SHIFT:xs)       = "SHIFT" : showOps xs
 showOps (DROP:xs)        = "DROP" : showOps xs
+showOps (DISCARD:xs)     = "DISCARD" : showOps xs
 showOps (PRINT:xs)       = let (msg,_:rest) = span (/=NULL) xs
                            in ("PRINT " ++ show (bc2string msg)) : showOps rest
 showOps (PRINTN:xs)      = "PRINTN" : showOps xs
@@ -168,6 +170,13 @@ bcc t = case t of
     b2 <- bcc t2
     let len = length b2
     return $ bc ++ [CJUMP, length b1 + 2] ++ longJump b1 len ++ [JUMP, len] ++ b2
+  Let i' "_" _ t1 (Sc1 t2) -> do
+    b1 <- bcc t1
+    b2 <- bcc $ varChanger 0  varLibres varBound t2
+    return $ b1 ++ [DISCARD] ++ b2
+    where
+      varLibres n p x = V p (Free x)
+      varBound n p i  = if n < i then V p (Bound (i - 1)) else V p (Bound i)
   Let i' _ _ t1 (Sc1 t2) -> case t2 of
     (Print _ s (V _ (Bound 0))) -> bcc (Print i' s t1)
     Let i _ _ (Print _ s (V _ (Bound 0))) (Sc1 t3) -> do
@@ -192,6 +201,13 @@ bctc t = case t of
     b2 <- bctc t2
     let len = length b2
     return $ bc ++ [CJUMP, length b1 + 2] ++ longJump b1 len ++ [JUMP, len] ++ b2
+  Let i' "_" _ t1 (Sc1 t2) -> do
+    b1 <- bcc t1
+    b2 <- bctc $ varChanger 0  varLibres varBound t2
+    return $ b1 ++ [DISCARD] ++ b2
+    where
+      varLibres n p x = V p (Free x)
+      varBound n p i  = if n < i then V p (Bound (i - 1)) else V p (Bound i)
   Let i' _ _ t1 (Sc1 t2) -> case t2 of
     (Print _ s (V _ (Bound 0))) -> bctc (Print i' s t1)
     Let i _ _ (Print _ s (V _ (Bound 0))) (Sc1 t3) -> do
@@ -296,6 +312,7 @@ runBC' bs e s = printVals bs e s >> incOpCount >> incOpMaxPilaSize s >> case bs 
   (JUMP:i:xs)     -> runBC' (drop i xs) e s
   (SHIFT:xs)      -> runBC' xs (head s : e) (tail s)
   (DROP:xs)       -> runBC' xs (tail e) s
+  (DISCARD:xs)    -> runBC' xs e (tail s)
   (PRINT:xs)      -> let (str, bc') = span (/=NULL) xs
                       in ( liftIO . putStr) (bc2string str) >> runBC' bc' e s
   (PRINTN:xs)     -> let (I n : _) = s
