@@ -1,0 +1,3 @@
+-- Test para verificar el ejercicio opciomal 8 del apunte "Optimizando la máquina virtual"
+let rec f (x:Nat) : Nat = f x 
+let ret : Nat = f 0
