@@ -89,9 +89,20 @@ Analizamos cada constructor de \texttt{TTerm}:
     \longJump{(\bcc{t_1})}{{\ell_2'}}\concat
     [\texttt{JUMP},\ell_2']\concat
     \bcc{t_2}\bigr) \\
- \overeqa{def.bcc} \ \ \; \length\bigl(\bcc{t}\bigr)+1
+ \overeqa{def.bcc} \ \ \; \length\bigl(\bcc{t}\bigr)+1 
 \end{align*}
 
+\item \textbf{Let de descarte}  
+    ($t=\texttt{Let}\; i' \; \texttt{``\_''} \;t_1\,(\texttt{Sc1 }t_2)$). 
+    Sea $ t_2' = \texttt{varChanger} \; 0 \; \texttt{varLibres} \; \texttt{varBound} \; t_2 $
+
+\begin{align*}
+\length(\bctc{t}) \overeqa{def.bctc} \ \ \length\!\bigl(      \bcc{t_1} \concat \texttt{[DISCARD]} \concat \bctc{t_2'}       \bigr)  \\ 
+\overeqa{length.(++)} \length (\bcc{t_1}) + \length \texttt{[DISCARD]} + \length (\bctc{t_2'}) \\ 
+  \overlea{H.I.} \quad \; \length (\bcc{t_1}) + \length \texttt{[DISCARD]} + \length (\bcc{t_2'}) + 1 \\
+  \overeqa{length.(++)} \length\!\bigl(      \bcc{t_1} \concat \texttt{[DISCARD]} \concat \bcc{t_2'}       \bigr) + 1\\
+  \overeqa{def.bcc} \quad \length(\bcc{t}) + 1
+\end{align*}
 
 %--------------------------------------------------
 \item \textbf{Let anidado}  
