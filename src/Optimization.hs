@@ -3,13 +3,16 @@ module Optimization where
 import Lang
 import Eval (semOp)
 import Subst
-import MonadFD4 (MonadFD4, lookupDecl, printFD4, getProf, clearFD4, addDecl)
+import MonadFD4 (MonadFD4, lookupDecl, printFD4, getProf, clearFD4, addDecl, failFD4)
 import Data.Foldable (foldrM)
 import Control.Monad (when)
 import Data.Function (on)
 
 iterations :: Int
 iterations = 4
+
+umbralInlining :: Int
+umbralInlining = 15
 
 os :: MonadFD4 m => [TTerm -> m TTerm]
 os = [constantFolding, deadCodeElimination, constantPropagation, inlineExpansion]
@@ -168,42 +171,85 @@ constantFolding t = case t of
                             constantFolding t2 >>= \t2' ->
                             return $ Let i s ty t1' (Sc1 t2')
 
-inlineExpansion ::MonadFD4 m => TTerm -> m TTerm
+-- | Expande inlining sobre un TTerm.
+inlineExpansion :: MonadFD4 m => TTerm -> m TTerm
 inlineExpansion t = case t of
-  V i (Global name) -> do
-    var <- lookupDecl name
-    case var of
-      (Just term) -> 
-        isPure term >>= \b1 ->
-        if b1 
-           then return term 
-           else return t
-      _           -> return t
-  V i var -> return t
-  Const i co -> return t
-  Lam i s ty (Sc1 t1) -> inlineExpansion t1 >>= \t1' ->
-                         return $ Lam i s ty (Sc1 t1')
-  App i (Lam _ _ _ t1) c@(Const _ _) -> return $ subst c t1
-  App i t1 t2 -> inlineExpansion t1 >>= \t1' ->
-                 inlineExpansion t2 >>= \t2' ->
-                 return $ App i t1' t2'
-  Print i s t1 -> inlineExpansion t1 >>= \t1' ->
-                  return $ Print i s t1'
-  BinaryOp i bo t1 t2 -> inlineExpansion t1 >>= \t1' ->
-                         inlineExpansion t2 >>= \t2' ->
-                         return $ BinaryOp i bo t1' t2'
-  Fix i s ty str ty' (Sc2 t1) -> inlineExpansion t1 >>= \t1' ->
-                                 return $ Fix i s ty str ty' (Sc2 t1')
-  IfZ i c t1 t2 -> inlineExpansion c >>= \c' ->
-                   inlineExpansion t1 >>= \t1' ->
-                   inlineExpansion t2 >>= \t2' ->
-                   return $ IfZ i c' t1' t2'
-  Let i s ty t1 (Sc1 t2) -> inlineExpansion t1 >>= \t1' ->
-                            inlineExpansion t2 >>= \t2' ->
-                            return $ Let i s ty t1' (Sc1 t2')
+  V _ (Global _)               -> inlineVar t
+  V _ _                        -> return t
+  Const {}                     -> return t
+  Lam {}                       -> lamCase t
+  App {}                       -> inlineApp t
+  Let {}                       -> letCase t
+  Fix {}                       -> fixCase t
+  Print i s t1                  -> do
+    t1' <- inlineExpansion t1
+    return (Print i s t1')
+  BinaryOp i op t1 t2          -> do
+    t1' <- inlineExpansion t1
+    t2' <- inlineExpansion t2
+    return (BinaryOp i op t1' t2')
+  IfZ i c t1 t2                -> do
+    c'  <- inlineExpansion c
+    t1' <- inlineExpansion t1
+    t2' <- inlineExpansion t2
+    return (IfZ i c' t1' t2')
 
--- Compare terms and returns True if they are equal
--- Ignore info and positions and names
+-- | Intenta inlining de variable global si es pequeña y pura.
+inlineVar :: MonadFD4 m => TTerm-> m TTerm
+inlineVar t@(V i (Global n)) = do
+  md <- lookupDecl n
+  case md of
+    Just body -> do
+      isSmallEnough <- smallEnough body
+      if isSmallEnough
+        then inlineExpansion body
+        else return t
+    Nothing   -> return t
+inlineVar t = failFD4 "Error inesperado"
+
+lamCase :: MonadFD4 m => TTerm -> m TTerm
+lamCase (Lam i x ty sc) = do
+  body <- inlineExpansion (open x sc)
+  let closed = close x body
+  return (Lam i x ty closed)
+lamCase t = failFD4 "Error inesperado"
+
+inlineApp :: MonadFD4 m => TTerm -> m TTerm
+inlineApp t@(App i fun@(V _ (Global n)) t2) = do
+  t2' <- inlineExpansion t2
+  md   <- lookupDecl n
+  let t' = App i fun t2'
+  case md of
+    Just lam@(Lam _ x _ sc) -> do
+      okApp <- smallEnough lam -- Es puro Y pequeño
+      pureArg <- isPure t2     
+      if okApp && pureArg 
+      then inlineExpansion (subst t2 sc)
+      else return t'
+    _ -> return t'
+inlineApp (App i t1 t2) = do
+  t1' <- inlineExpansion t1
+  t2' <- inlineExpansion t2
+  return (App i t1' t2')
+inlineApp t = failFD4 "Error inesperado"
+
+letCase :: MonadFD4 m => TTerm -> m TTerm
+letCase (Let i x ty def sc) = do
+  def'  <- inlineExpansion def
+  body  <- inlineExpansion (open x sc)
+  let closed = close x body
+  return (Let i x ty def' sc)
+letCase _ = failFD4 "Error inesperado"
+
+fixCase :: MonadFD4 m => TTerm -> m TTerm
+fixCase (Fix i f fty x xty sc) = do
+  body <- inlineExpansion (open2 f x sc)
+  let closed = close2 f x body
+  return (Fix i f fty x xty closed)
+fixCase _ = failFD4 "Error inesperado"
+
+-- Compara dos términos de tipo TTerm.
+-- Devuelve True si son iguales, False en caso contrario.
 compTTerm :: TTerm -> TTerm -> Bool
 compTTerm (V _ x) (V _ y) = x == y
 compTTerm (Const _ c1) (Const _ c2) = c1 == c2
@@ -222,6 +268,13 @@ compTTerm (IfZ _ t1 t2 t3) (IfZ _ t1' t2' t3') =
 compTTerm (Let _ _ ty1 t11 (Sc1 t12)) (Let _ _ ty2 t21 (Sc1 t22)) =
   ty1 == ty2 && compTTerm t11 t21 && compTTerm t12 t22
 compTTerm _ _ = False
+
+-- | Chequea pureza y tamaño < 15 nodos.
+smallEnough :: MonadFD4 m => TTerm -> m Bool
+smallEnough t = do
+  p <- isPure t
+  let c = countNodes t < umbralInlining
+  return (p && c)
 
 isPure :: MonadFD4 m => TTerm -> m Bool
 isPure (V p (Global var)) = lookupDecl var >>= \case
@@ -252,3 +305,14 @@ isPure (Let p v vty m (Sc1 o)) = do
 
 isImpure :: MonadFD4 m => TTerm -> m Bool
 isImpure = fmap not . isPure
+
+countNodes :: TTerm -> Int
+countNodes (V {}) = 1
+countNodes (Const {}) = 1
+countNodes (Lam _ _ _ (Sc1 t)) = 1 + countNodes t
+countNodes (App _ t1 t2) = countNodes t1 + countNodes t2 + 1
+countNodes (Print _ _ t) = countNodes t + 1
+countNodes (BinaryOp _ _ t1 t2) = countNodes t1 + countNodes t2 + 1
+countNodes (Fix _ _ _ _ _ (Sc2 t)) = 1 + countNodes t
+countNodes (IfZ _ t1 t2 t3) = countNodes t1 + countNodes t2 + countNodes t3 + 1
+countNodes (Let _ _ _ def (Sc1 body)) = countNodes def + countNodes body + 1
