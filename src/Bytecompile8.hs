@@ -127,6 +127,7 @@ pattern PRINT    = 13
 pattern PRINTN   = 14
 pattern JUMP     = 15
 pattern TAILCALL = 16
+pattern DISCARD = 17
 
 --función util para debugging: muestra el Bytecode de forma más legible.
 showOps :: Bytecode -> [String]
@@ -153,6 +154,7 @@ showOps (JUMP:xs)        = let (n, xs') = bs2int xs
                           in ("JUMP off=" ++ show n) : showOps xs'
 showOps (SHIFT:xs)       = "SHIFT" : showOps xs
 showOps (DROP:xs)        = "DROP" : showOps xs
+showOps (DISCARD:xs)     = "DISCARD" : showOps xs
 showOps (PRINT:xs)       = let (msg,_:rest) = span (/=NULL) xs
                            in ("PRINT " ++ show (bc2string msg)) : showOps rest
 showOps (PRINTN:xs)      = "PRINTN" : showOps xs
@@ -202,13 +204,13 @@ bcc t = case t of
     let lb2 = length b2
     let lengthJump = int2bs lb2
     return $ bc ++ [CJUMP] ++ lengthCJump ++ longJump b1 (length lengthJump + lb2) ++ [JUMP] ++ lengthJump ++ b2
-    -- [c, JUMP, l1, x1, x2, ..., xn, JUMP, l2, y1, y2, ..., ym]
-    --  0, 1,     2, 2 + 1, 2 + 2, 2 + n, 2 + n + 1, 2+n+2,2+n+m]   
-    -- - Si c == 1, seguimos ejecutando en la vm, 
-    --   luego llegaremos a un JUMP que indica el comienzo del "else" 
-    --   que obviamente saltearemos
-    -- - Sino, hacemos un salto de n + 1 (JUMP y el largo de b1), y ejecutamos
-    --   la condición del else.
+  Let i' "_" _ t1 (Sc1 t2) -> do
+    b1 <- bcc t1
+    b2 <- bcc $ varChanger 0  varLibres varBound t2
+    return $ b1 ++ [DISCARD] ++ b2
+    where
+      varLibres n p x = V p (Free x)
+      varBound n p i  = if n < i then V p (Bound (i - 1)) else V p (Bound i)
   Let i' _ _ t1 (Sc1 t2) -> case t2 of
     (Print _ s (V _ (Bound 0))) -> bcc (Print i' s t1)
     Let i _ _ (Print _ s (V _ (Bound 0))) (Sc1 t3) -> do
@@ -234,6 +236,13 @@ bctc t = case t of
     let lengthCJump = int2bs (length b1 + 2)
     let lengthJump = int2bs (length b2)
     return $ bc ++ [CJUMP] ++ lengthCJump ++ b1 ++ [JUMP] ++ lengthJump ++ b2
+  Let i' "_" _ t1 (Sc1 t2) -> do
+    b1 <- bcc t1
+    b2 <- bctc $ varChanger 0  varLibres varBound t2
+    return $ b1 ++ [DISCARD] ++ b2
+    where
+      varLibres n p x = V p (Free x)
+      varBound n p i  = if n < i then V p (Bound (i - 1)) else V p (Bound i)
   Let i' _ _ t1 (Sc1 t2) -> case t2 of
     (Print _ s (V _ (Bound 0))) -> bctc (Print i' s t1)
     Let i _ _ (Print _ s (V _ (Bound 0))) (Sc1 t3) -> do
@@ -351,6 +360,7 @@ runBC' bs e s = printVals bs e s >> incOpCount >> incOpMaxPilaSize s >> case bs 
                     in runBC' (drop n xs') e s
   (SHIFT:xs)      -> runBC' xs (head s : e) (tail s)
   (DROP:xs)       -> runBC' xs (tail e) s
+  (DISCARD:xs)    -> runBC' xs e (tail s)
   (PRINT:xs)      -> let (str, bc') = span (/=NULL) xs
                       in ( liftIO . putStr) (bc2string str) >> runBC' bc' e s
   (PRINTN:xs)     -> let (I n : _) = s
