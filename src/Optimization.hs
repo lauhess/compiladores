@@ -7,6 +7,7 @@ import MonadFD4 (MonadFD4, lookupDecl, printFD4, getProf, clearFD4, addDecl)
 import Data.Foldable (foldrM)
 import Control.Monad (when)
 import Data.Function (on)
+import Common (abort)
 
 iterations :: Int
 iterations = 4
@@ -183,7 +184,12 @@ inlineExpansion t = case t of
   Const i co -> return t
   Lam i s ty (Sc1 t1) -> inlineExpansion t1 >>= \t1' ->
                          return $ Lam i s ty (Sc1 t1')
-  App i (Lam _ _ _ t1) c@(Const _ _) -> return $ subst c t1
+  -- App i (Lam _ _ _ t1) c@(Const _ _) -> return $ subst c t1
+  App i (Lam _ _ _ (Sc1 t1)) c@(Const _ _) -> return $ varChanger 0 (\_ p n -> V p (Free n)) bnd t1
+    where bnd depth p j | j <  depth = V p (Bound j)
+                        | j == depth = c
+                        | j >  depth  = V p (Bound (j-1))
+                        | otherwise = abort "Error?"
   App i t1 t2 -> inlineExpansion t1 >>= \t1' ->
                  inlineExpansion t2 >>= \t2' ->
                  return $ App i t1' t2'
